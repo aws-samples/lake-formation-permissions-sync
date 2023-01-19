@@ -36,28 +36,28 @@ cdk deploy --context config_bucket_name="ctldl" --context backup_bucket_name="s3
 Replace the config_bucket_name, backup_bucket_name, and the target_region with your settings specified in the configuration file. 
 - After you deployment is successful, confirm you can see the newly deployed job in your source region Glue Jobs list. The newly created Glue job role will also be added as a Data Lake administrator in the target region. Two screenshots are shared below for reference.
     1. Newly deployed Python shell job in the source region:
-![Job](/images/pyjob.PNG)
-    2. Glue role is added as admin on the target region: ![Admin](/images/role-as-admin.PNG)
+![Job](./images/pyjob.PNG)
+    2. Glue role is added as admin on the target region: ![Admin](./images/role-as-admin.PNG)
 
 
 ## Testing
 ### Current State in Source Region Lake Formation
-Databases![1](/images/1.png)
-Tables![2](/images/2.png)
-Data Permissions![3](/images/3.png)
-Data Permissions (Continued)![4](/images/4.png)
+Databases![1](./images/1.png)
+Tables![2](./images/2.png)
+Data Permissions![3](./images/3.png)
+Data Permissions (Continued)![4](./images/4.png)
 
 ### Run Restore Job
 - A configuration is used to replicate 3 databases ("sampledb", "tag_database", "cur_database"), all tables, and all data permissions on the three databases and the associated tables.
 - The source region is set as "N.Virginia" and the target region for replication is set as "Mumbai".
-- In the source region, run the Glue job from the AWS Glue Studio using the "Run" button as shown below:![Run](/images/pyjob.PNG)
-- Confirm the Glue job ran successfully as shown below: ![Succ](/images/succ-run.PNG)
+- In the source region, run the Glue job from the AWS Glue Studio using the "Run" button as shown below:![Run](./images/pyjob.PNG)
+- Confirm the Glue job ran successfully as shown below: ![Succ](./images/succ-run.PNG)
 
 ### Results in Target Region Lake Formation
-Databases![7](/images/7.png)
-Tables![8](/images/8.png)
-Data Permissions![9](/images/9.png)
-Data Permissions (Continued)![10](/images/10.png)
+Databases![7](./images/7.png)
+Tables![8](./images/8.png)
+Data Permissions![9](./images/9.png)
+Data Permissions (Continued)![10](./images/10.png)
 
 ## Configuration Options
 1.	Default: This contains default values used for replication. If you are planning to replicate to a AWS region which is not part of the default list, please add it before executing the utility.
