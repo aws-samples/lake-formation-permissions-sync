@@ -194,7 +194,9 @@ FAQ:
   To ensure exact replication of changes this utility does not modify the original request and if the target region does not have
   the role with same name and permissions then the grants will fail, that's the reason the execution of the utility is limited to an account only. 
   The raw requests are always available to extend to beyond one account if the underlying permissions are managed.
-- 
+- How can I report of bugs or request enhancement?
+
+  The utility is in the active developement. If you encounter any bugs or request enhancements, please communicate through the issues and it will be addressed. 
 
 
 
