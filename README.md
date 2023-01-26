@@ -8,7 +8,7 @@ There are two modes of this backup process.
 - Install [AWS CDK](https://aws.amazon.com/cdk/).
 - Install [Python](https://www.python.org/downloads/).
 - An AWS account for use with deployment and testing.
-- Updated [configuration file](lake-formation-permissions-dr/realtime/glue-lf-config.conf) with options to customize Lake Formation restore from a source region to a target region. Once you upload your configuration file to an S3 bucket, make note of the configuration S3 bucket name and the backup file bucket name specified in the configuration file.
+- Updated [configuration file](./realtime/glue-lf-config.conf) with options to customize Lake Formation restore from a source region to a target region. Once you upload your configuration file to an S3 bucket, make note of the configuration S3 bucket name and the backup file bucket name specified in the configuration file.
 
 ## Batch Mode
  
@@ -17,12 +17,12 @@ There are two modes of this backup process.
 ![Lake_Formation_Batch](img/LakeFormationDRBatch.png)
 
 ## Prerequisites for Batch mode
-- Updated [configuration file](./glue_config.conf) with options to customize Lake Formation restore from a source region to a target region. See this [`description`](#configuration-options) for deatils about the configuration options. Once you upload your configuration file to an S3 bucket, make note of the configuration S3 bucket name and the backup file bucket name specified in the configuration file. 
+- Updated [configuration file](./batch/glue_config.conf) with options to customize Lake Formation restore from a source region to a target region. See this [`description`](#configuration-options) for deatils about the configuration options. Once you upload your configuration file to an S3 bucket, make note of the configuration S3 bucket name and the backup file bucket name specified in the configuration file. 
 
 
 ## Realtime Mode
 
- This mode is suitable for replicating ongoing changes once the existing setup is in sync with the target region. The source and target regions can be defined in [configuration file](lake-formation-permissions-dr/realtime/glue-lf-config.conf)
+ This mode is suitable for replicating ongoing changes once the existing setup is in sync with the target region. The source and target regions can be defined in [configuration file](./realtime/glue-lf-config.conf)
 
 ![Lake_Formation Realtime](img/LakeFormationDRRealTime.png)
 
@@ -59,7 +59,7 @@ This project creates the following objects:
  * TODO : SNS notification for failures
 
 ## Prerequisites for Realtime mode
-- Updated [configuration file](lake-formation-permissions-dr/realtime/glue-lf-config.conf) with options to customize Lake Formation restore from a source region to a target region. See this [`description`](#configuration-options) for deatils about the configuration options.
+- Updated [configuration file](./realtime/glue-lf-config.conf) with options to customize Lake Formation restore from a source region to a target region. See this [`description`](#configuration-options) for deatils about the configuration options.
 
 ## Deployment
 - [Configure AWS CLI in your source region](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html).
@@ -161,7 +161,7 @@ The following steps are only to test the setup.
 
 ### Steps to replicate Glue Objects and LakeFormation Permissions
 
-1. Create a Database in the source region from AWS Glue console. In this testing scenario, we have used us-east-1 (N. Virginia) as the source region. The source and target region can be configured in the [configuration file](lake-formation-permissions-dr/realtime/glue-lf-config.conf) along with S3 bucket mapping.
+1. Create a Database in the source region from AWS Glue console. In this testing scenario, we have used us-east-1 (N. Virginia) as the source region. The source and target region can be configured in the [configuration file](./realtime/glue-lf-config.conf) along with S3 bucket mapping.
 
 ![Create Database](img/GlueCreateDatabase.png)
 
