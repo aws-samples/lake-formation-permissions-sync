@@ -103,7 +103,11 @@ $ pip install -r requirements.txt
 
 ### CDK stack Deployment
 At this point you can now start deployment of CDK code.
-**Step 1: Navigate to location ```~/lake-formation/lake-formation-permissions-dr/realtime/lf-dr-cdk/```. Initialize AWS CDK for first time only. If AWS CDK is already initialized then skip to Step 2.**
+
+
+**Step 1: Navigate to location 
+```~/lake-formation-permissions-sync/realtime/lf-dr-cdk/```. 
+Initialize AWS CDK for first time only. If AWS CDK is already initialized then skip to Step 2.**
 
 Option 1: With default AWS profile
 ```
