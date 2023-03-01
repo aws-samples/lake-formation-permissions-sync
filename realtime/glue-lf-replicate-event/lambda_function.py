@@ -299,8 +299,23 @@ def lambda_handler(event, context):
                 boto3_parameters['PartitionInputList'][0]['StorageDescriptor']['NumberOfBuckets'] = int(
                     boto3_parameters['PartitionInputList'][0]['StorageDescriptor']['NumberOfBuckets'])
                 print(boto3_parameters)
+                boto3_parameters['PartitionInputList'][0]['StorageDescriptor']['Location'].replace(s3_table_bucket_name,s3_table_target_bucket_name)
                 try:
                     response = glue_client.batch_create_partition(**boto3_parameters)
+                    event_processed(response, k['EventId'])
+                except ClientError as err:
+                    if err.response['Error']['Code'] == "AlreadyExistsException":
+                        print("Partitions Already Exists")
+                        event_processed(response, k['EventId'])
+                    else:
+                        raise err
+            elif event_name == 'CreatePartition':
+                boto3_parameters['PartitionInput']['StorageDescriptor']['NumberOfBuckets'] = int(
+                    boto3_parameters['PartitionInput']['StorageDescriptor']['NumberOfBuckets'])
+                print(boto3_parameters)
+                boto3_parameters['PartitionInput']['StorageDescriptor']['Location'].replace(s3_table_bucket_name,s3_table_target_bucket_name)
+                try:
+                    response = glue_client.create_partition(**boto3_parameters)
                     event_processed(response, k['EventId'])
                 except ClientError as err:
                     if err.response['Error']['Code'] == "AlreadyExistsException":
