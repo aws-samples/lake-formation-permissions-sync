@@ -8,12 +8,17 @@ from cloudtrail_to_boto3 import cloudtail_to_boto3_converter
 from boto3.dynamodb.conditions import Key
 
 
+def get_s3_table_target_bucket_name(table_location):
+    s3_table_target_bucket_name = table_location.replace("s3://", "").split("/")[0]
+    s3_table_target_bucket_name = (s3_table_target_bucket_name[:-1] if s3_table_target_bucket_name.endswith('/') else s3_table_target_bucket_name)
+    return s3_table_target_bucket_name
+
+
 def get_config(s3_config_bucket,s3_config_file ):
     s3 = boto3.client('s3')
     body_content = s3.get_object(Bucket=s3_config_bucket, Key=s3_config_file)['Body'].read().decode('utf-8')
     config = ConfigParser()
     config.read_string(body_content)
-    #config.read("glue_config.conf")
     return config
 
 config_file_bucket = os.environ['config_file_bucket']
@@ -85,11 +90,10 @@ def lambda_handler(event, context):
                     boto3_parameters['TableInput']['StorageDescriptor']['NumberOfBuckets'] = int(boto3_parameters['TableInput']['StorageDescriptor']['NumberOfBuckets'])
                     boto3_parameters['TableInput']['Retention'] = int(boto3_parameters['TableInput']['Retention'])
                     s3_table_location = boto3_parameters['TableInput']['StorageDescriptor']['Location']
-                    s3_table_bucket_name = s3_table_location.split('//')[1].split('/')[0]
+                    s3_table_bucket_name = get_s3_table_target_bucket_name(s3_table_location)
                     if s3_table_bucket_name in table_s3_mapping:
                         s3_table_target_bucket_name = table_s3_mapping[s3_table_bucket_name]
-                    boto3_parameters['TableInput']['StorageDescriptor']['Location'] = boto3_parameters['TableInput']['StorageDescriptor']['Location'].replace(s3_table_bucket_name, s3_table_target_bucket_name)
-
+                        boto3_parameters['TableInput']['StorageDescriptor']['Location'] = boto3_parameters['TableInput']['StorageDescriptor']['Location'].replace(s3_table_bucket_name, s3_table_target_bucket_name)
                     response = glue_client.create_table(**boto3_parameters)
                     record_processed_status = event_processed(response, k['EventId'])
                 except ClientError as err:
@@ -145,10 +149,10 @@ def lambda_handler(event, context):
                     boto3_parameters['TableInput']['StorageDescriptor']['NumberOfBuckets'])
                     boto3_parameters['TableInput']['Retention'] = int(boto3_parameters['TableInput']['Retention'])
                     s3_table_location = boto3_parameters['TableInput']['StorageDescriptor']['Location']
-                    s3_table_bucket_name = s3_table_location.split('//')[1].split('/')[0]
+                    s3_table_bucket_name = get_s3_table_target_bucket_name(s3_table_location)
                     if s3_table_bucket_name in table_s3_mapping:
                         s3_table_target_bucket_name = table_s3_mapping[s3_table_bucket_name]
-                    boto3_parameters['TableInput']['StorageDescriptor']['Location'] = boto3_parameters['TableInput']['StorageDescriptor']['Location'].replace(s3_table_bucket_name, s3_table_target_bucket_name)
+                        boto3_parameters['TableInput']['StorageDescriptor']['Location'] = boto3_parameters['TableInput']['StorageDescriptor']['Location'].replace(s3_table_bucket_name, s3_table_target_bucket_name)
                     response = glue_client.update_table(**boto3_parameters)
                     record_processed_status = event_processed(response, k['EventId'])
                 except ClientError as err:
