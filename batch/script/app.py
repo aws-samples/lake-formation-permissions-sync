@@ -206,11 +206,11 @@ def extract_database(source_region, output_file_name, db_list):
                         table_count[db['Name']] += 1
         for db_name in table_count.keys():
             print(f"{db_name}=>table_count:{table_count[db_name]}")
-        rf = open(database_data_file.name,'r+b')
-        wr.s3.upload(local_file=rf, path=output_file_name)
-        print (f"Stored data in database_data_file.name {database_data_file.name}")
-        database_data_file.close()
-        print (f"Output_file_name {output_file_name}")
+        database_data_file.seek(0)
+        with open(database_data_file.name, 'rb') as rf:
+            wr.s3.upload(local_file=rf, path=output_file_name)
+            print(f"Stored data in database_data_file.name {database_data_file.name}")
+            print(f"Output_file_name {output_file_name}")
     print(f"Extracted database count => {len(list(database_count.keys()))}  total table count => {len(list(table_count.elements()))}")    
 
 
