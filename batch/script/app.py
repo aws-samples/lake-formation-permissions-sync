@@ -151,23 +151,25 @@ def restore_data(config, data_source, glue_client,update_table_s3_location, tabl
             database_count[db_name] += 1
         elif object_type == 'table':
             table_data = json.loads(object_data)
-            print(f"Restoring table {object_name} json data => {table_data} ")
-            table_s3_location_target = None
+            print(f"Restoring table {object_name} json data => {table_data}")
             if update_table_s3_location:
-                if 'Location' in database_data:
-                    table_s3_location = database_data.get('Location', None)
+                if 'Location' in table_data.get('StorageDescriptor'):
+                    storage_descriptor = table_data.get('StorageDescriptor', {})
+                    table_s3_location = storage_descriptor.get('Location', None)
+                    print(f"table_s3_location for update => {table_s3_location}")
+                    table_s3_location_target = None
                     if table_s3_location is not None:
-                        u = urlparse(database_s3_location)
+                        u = urlparse(table_s3_location)
                         if u.netloc in table_s3_mapping:
                             target_s3_location = table_s3_mapping[u.netloc]
                             u = u._replace(netloc=target_s3_location)
                             table_s3_location_target = urlunparse(u)
                         else:
                             table_s3_location_target = table_s3_location
-                    table_data['Location'] = table_s3_location_target
+                    table_data['StorageDescriptor']['Location'] = table_s3_location_target
             create_table(glue_client, db_name, table_data)
             table_count[db_name] += 1
-    f.close()        
+    f.close()
     for db_name in database_count.keys():
         print(f"{db_name}=>table_count:{table_count[db_name]}")
     print(f"Restored database count => {len(list(database_count.keys()))}  table count => {len(list(table_count.elements()))}")
@@ -319,4 +321,4 @@ def main():
     print(f"Processing finished in {int(execution_time)} secs")
     print("=" * 50)
 
-main()    
+main()
