@@ -114,66 +114,92 @@ def create_database(glue_client,database_input):
         res = glue_client.update_database(DatabaseInput=database_input, Name=database_input['Name'])
 
 
-def restore_data(config, data_source, glue_client,update_table_s3_location, table_s3_mapping):
+def update_location(s3_location, table_s3_mapping):
+    if s3_location:
+        u = urlparse(s3_location)
+        if u.netloc in table_s3_mapping:
+            target_s3_location = table_s3_mapping[u.netloc]
+            u = u._replace(netloc=target_s3_location)
+            return urlunparse(u)
+    return s3_location
+
+def update_database_location(database_data, table_s3_mapping):
+    if 'LocationUri' in database_data:
+        database_data['LocationUri'] = update_location(database_data['LocationUri'], table_s3_mapping)
+    return database_data
+
+def update_table_location(table_data, table_s3_mapping):
+    storage_descriptor = table_data.get('StorageDescriptor', {})
+    if 'Location' in storage_descriptor:
+        table_data['StorageDescriptor']['Location'] = update_location(storage_descriptor.get('Location'), table_s3_mapping)
+    return table_data
+
+
+
+def restore_data(config, data_source, glue_client, update_table_s3_location, table_s3_mapping):
     print ("Restoring database...")
-    #glue_client = get_glue_client(config[data_source]['destination_region'])
     database_count = Counter()
     table_count = Counter()
+    partition_count = Counter()
     s3_path = config[data_source]['s3_data_path']
     f = tempfile.TemporaryFile(mode='w+b')
     wr.s3.download(path=s3_path, local_file=f)
     f.seek(0)
     rf = open(f.name, "r+t")
-    for table_data in rf.readlines():
-        print(table_data)
-        object_type, db_name, object_name, object_data = table_data.split("\t")
-        #print(object_type, db_name, object_name)
+    for object_data_line in rf.readlines():
+        object_type, db_name, object_name, object_data = object_data_line.split("\t")
+        print (f"processing object_type {object_type}")
         if object_type == 'database':
             database_data = json.loads(object_data)
-            print(f"Restoring database {object_name} json data => {database_data}")
-            database_s3_location_target = None
             if update_table_s3_location:
-                if 'LocationUri' in database_data:
-                    database_s3_location = database_data.get('LocationUri')
-                    if database_s3_location is not None:
-                        u = urlparse(database_s3_location)
-                        print (f"Received table_s3_mapping {table_s3_mapping}")
-                        print (f"Received type table_s3_mapping {type(table_s3_mapping)}")
-                        if u.netloc in table_s3_mapping:
-                            target_s3_location = table_s3_mapping[u.netloc]
-                            u = u._replace(netloc = target_s3_location)
-                            print (u)
-                            database_s3_location_target = urlunparse(u)
-                        else:
-                            database_s3_location_target = database_s3_location
-                    database_data['LocationUri'] = database_s3_location_target
+                database_data = update_database_location(database_data, table_s3_mapping)
             create_database(glue_client, database_data)
             database_count[db_name] += 1
         elif object_type == 'table':
             table_data = json.loads(object_data)
-            print(f"Restoring table {object_name} json data => {table_data}")
             if update_table_s3_location:
-                if 'Location' in table_data.get('StorageDescriptor'):
-                    storage_descriptor = table_data.get('StorageDescriptor', {})
-                    table_s3_location = storage_descriptor.get('Location', None)
-                    print(f"table_s3_location for update => {table_s3_location}")
-                    table_s3_location_target = None
-                    if table_s3_location is not None:
-                        u = urlparse(table_s3_location)
-                        if u.netloc in table_s3_mapping:
-                            target_s3_location = table_s3_mapping[u.netloc]
-                            u = u._replace(netloc=target_s3_location)
-                            table_s3_location_target = urlunparse(u)
-                        else:
-                            table_s3_location_target = table_s3_location
-                    table_data['StorageDescriptor']['Location'] = table_s3_location_target
+                table_data = update_table_location(table_data, table_s3_mapping)
             create_table(glue_client, db_name, table_data)
             table_count[db_name] += 1
-    f.close()
-    for db_name in database_count.keys():
-        print(f"{db_name}=>table_count:{table_count[db_name]}")
-    print(f"Restored database count => {len(list(database_count.keys()))}  table count => {len(list(table_count.elements()))}")
 
+        elif object_type == 'partition':
+            partition_data = json.loads(object_data)
+            database_name = db_name
+            table_name = object_name
+            partition = partition_data
+            try:
+                partition_input = {
+                    'Values': partition.get('Values', []),
+                    'StorageDescriptor': partition.get('StorageDescriptor', {}),
+                    'Parameters': partition.get('Parameters', {})
+                }
+                glue_client.create_partition(
+                    DatabaseName=database_name,
+                    TableName=table_name,
+                    PartitionInput=partition_input
+                )
+                print(f"Successfully created partition: {partition['Values']}")
+
+            except glue_client.exceptions.AlreadyExistsException:
+                try:
+                    glue_client.update_partition(
+                        DatabaseName=database_name,
+                        TableName=table_name,
+                        PartitionValueList=partition['Values'],
+                        PartitionInput=partition_input
+                    )
+                    print(f"Successfully updated partition: {partition['Values']}")
+                except Exception as update_err:
+                    print(f"Failed to update partition {partition['Values']}. Reason: {update_err}")
+                    raise update_err
+            except Exception as e:
+                print(f"Failed to create partition {partition['Values']}. Reason: {e}")
+                raise e
+    rf.close()
+
+    for db_name in database_count.keys():
+        print(f"{db_name}=>table_count:{table_count[db_name]} partition_count:{partition_count[db_name]}")
+    print(f"Restored database count => {len(list(database_count.keys()))}  table count => {len(list(table_count.elements()))}  partition count => {len(list(partition_count.elements()))}")
 def get_tables(source_region, data_source, db_list):
     session_region = boto3.Session(region_name=source_region)
     db_list_string = "','".join(db_list)
@@ -187,8 +213,10 @@ def extract_database(source_region, output_file_name, db_list):
     print ("Extracting database...")
     table_count = Counter()
     database_count = Counter()
+    partition_count = Counter()
     glue_client = get_client(source_region,'glue')
     table_paginator = glue_client.get_paginator("get_tables")
+    partition_paginator = glue_client.get_paginator("get_partitions")
     db_paginator = glue_client.get_paginator("get_databases")
     for page in db_paginator.paginate():
         database_data_file = tempfile.TemporaryFile(mode='w+')
@@ -206,9 +234,17 @@ def extract_database(source_region, output_file_name, db_list):
                         _table = [table.pop(key,'') for key in col_to_be_removed]
                         database_data_file.write(f"table\t{db['Name']}\t{table['Name']}\t{json.dumps(table)}\n")
                         table_count[db['Name']] += 1
+                        for partition_page in partition_paginator.paginate(DatabaseName=db['Name'], TableName=table['Name']):
+                            for partition in partition_page['Partitions']:
+                                print(f"Processing partition {partition['Values']} for table {table['Name']}")
+                                col_to_be_removed = ['CatalogId', 'DatabaseName', 'CreationTime', 'LastAccessTime']
+                                _partition = [partition.pop(key,'') for key in col_to_be_removed]
+                                database_data_file.write(f"partition\t{db['Name']}\t{table['Name']}\t{json.dumps(partition)}\n")
+                                partition_count[db['Name']] += 1
         for db_name in table_count.keys():
             print(f"{db_name}=>table_count:{table_count[db_name]}")
         database_data_file.seek(0)
+        print (f"database_data_file.name => {database_data_file.name}")
         with open(database_data_file.name, 'rb') as rf:
             wr.s3.upload(local_file=rf, path=output_file_name)
             print(f"Stored data in database_data_file.name {database_data_file.name}")
@@ -264,7 +300,7 @@ def main():
     global source_session
     global destination_session
     start_time = time.time()
-    
+
     args = getResolvedOptions(sys.argv, ['CONFIG_BUCKET','CONFIG_FILE_KEY'])
 
     config_file_bucket = args['CONFIG_BUCKET']
