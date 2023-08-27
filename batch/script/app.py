@@ -54,7 +54,7 @@ def store_permission_data(permission_data,permissions_from_region,lf_storage_buc
     f = tempfile.TemporaryFile(mode='w+')
     for pd in permission_data:
         f.write(json.dumps(pd) + "\n")
-    rf = open(f.name,'r+b')    
+    rf = open(f.name,'r+b')
     output_file_name = f"s3://{lf_storage_bucket}/{lf_storage_folder}/{permissions_from_region}/{lf_storage_file_name}"
     print (f"Writing to output file name {output_file_name}")
     wr.s3.upload(local_file=rf, path=output_file_name)
@@ -64,7 +64,7 @@ def apply_table_permissions(file_location, destination_client, db_list,source_re
     print ("Reading permissions from s3 location")
     f = tempfile.TemporaryFile(mode='w+b')
     s3_client = get_client(source_region, 's3')
-    s3_client.download_fileobj(f"{lf_storage_bucket}", f"{lf_storage_folder}/{source_region}/{lf_storage_file_name}", f)    
+    s3_client.download_fileobj(f"{lf_storage_bucket}", f"{lf_storage_folder}/{source_region}/{lf_storage_file_name}", f)
     print (f"{lf_storage_bucket}/{lf_storage_folder}/{source_region}/{lf_storage_file_name}")
     f.seek(0)
     rf = open(f.name,'r+')
@@ -113,7 +113,6 @@ def create_database(glue_client,database_input):
     except glue_client.exceptions.AlreadyExistsException:
         res = glue_client.update_database(DatabaseInput=database_input, Name=database_input['Name'])
 
-
 def update_location(s3_location, table_s3_mapping):
     if s3_location:
         u = urlparse(s3_location)
@@ -134,10 +133,39 @@ def update_table_location(table_data, table_s3_mapping):
         table_data['StorageDescriptor']['Location'] = update_location(storage_descriptor.get('Location'), table_s3_mapping)
     return table_data
 
-
+def create_or_update_partition(glue_client, db_name, table_name, partition_data, update_table_s3_location, table_s3_mapping):
+    try:
+        if update_table_s3_location:
+            partition_data = update_table_location(partition_data, table_s3_mapping)
+        partition_input = {
+            'Values': partition_data.get('Values', []),
+            'StorageDescriptor': partition_data.get('StorageDescriptor', {}),
+            'Parameters': partition_data.get('Parameters', {})
+        }
+        glue_client.create_partition(
+            DatabaseName=db_name,
+            TableName=table_name,
+            PartitionInput=partition_input
+        )
+        print(f"Successfully created partition: {partition_data['Values']}")
+    except glue_client.exceptions.AlreadyExistsException:
+        try:
+            glue_client.update_partition(
+                DatabaseName=db_name,
+                TableName=table_name,
+                PartitionValueList=partition_data['Values'],
+                PartitionInput=partition_input
+            )
+            print(f"Successfully updated partition: {partition_data['Values']}")
+        except Exception as update_err:
+            print(f"Failed to update partition {partition_data['Values']}. Reason: {update_err}")
+            raise update_err
+    except Exception as e:
+        print(f"Failed to create partition {partition_data['Values']}. Reason: {e}")
+        raise e
 
 def restore_data(config, data_source, glue_client, update_table_s3_location, table_s3_mapping):
-    print ("Restoring database...")
+    print("Restoring database...")
     database_count = Counter()
     table_count = Counter()
     partition_count = Counter()
@@ -148,7 +176,7 @@ def restore_data(config, data_source, glue_client, update_table_s3_location, tab
     rf = open(f.name, "r+t")
     for object_data_line in rf.readlines():
         object_type, db_name, object_name, object_data = object_data_line.split("\t")
-        print (f"processing object_type {object_type}")
+        print(f"Processing object_type {object_type} {db_name} {object_name} ")
         if object_type == 'database':
             database_data = json.loads(object_data)
             if update_table_s3_location:
@@ -161,45 +189,15 @@ def restore_data(config, data_source, glue_client, update_table_s3_location, tab
                 table_data = update_table_location(table_data, table_s3_mapping)
             create_table(glue_client, db_name, table_data)
             table_count[db_name] += 1
-
         elif object_type == 'partition':
             partition_data = json.loads(object_data)
-            database_name = db_name
-            table_name = object_name
-            partition = partition_data
-            try:
-                partition_input = {
-                    'Values': partition.get('Values', []),
-                    'StorageDescriptor': partition.get('StorageDescriptor', {}),
-                    'Parameters': partition.get('Parameters', {})
-                }
-                glue_client.create_partition(
-                    DatabaseName=database_name,
-                    TableName=table_name,
-                    PartitionInput=partition_input
-                )
-                print(f"Successfully created partition: {partition['Values']}")
-
-            except glue_client.exceptions.AlreadyExistsException:
-                try:
-                    glue_client.update_partition(
-                        DatabaseName=database_name,
-                        TableName=table_name,
-                        PartitionValueList=partition['Values'],
-                        PartitionInput=partition_input
-                    )
-                    print(f"Successfully updated partition: {partition['Values']}")
-                except Exception as update_err:
-                    print(f"Failed to update partition {partition['Values']}. Reason: {update_err}")
-                    raise update_err
-            except Exception as e:
-                print(f"Failed to create partition {partition['Values']}. Reason: {e}")
-                raise e
+            create_or_update_partition(glue_client, db_name, object_name, partition_data, update_table_s3_location, table_s3_mapping)
+            partition_count[db_name] += 1
     rf.close()
-
     for db_name in database_count.keys():
         print(f"{db_name}=>table_count:{table_count[db_name]} partition_count:{partition_count[db_name]}")
     print(f"Restored database count => {len(list(database_count.keys()))}  table count => {len(list(table_count.elements()))}  partition count => {len(list(partition_count.elements()))}")
+
 def get_tables(source_region, data_source, db_list):
     session_region = boto3.Session(region_name=source_region)
     db_list_string = "','".join(db_list)
@@ -249,7 +247,7 @@ def extract_database(source_region, output_file_name, db_list):
             wr.s3.upload(local_file=rf, path=output_file_name)
             print(f"Stored data in database_data_file.name {database_data_file.name}")
             print(f"Output_file_name {output_file_name}")
-    print(f"Extracted database count => {len(list(database_count.keys()))}  total table count => {len(list(table_count.elements()))}")    
+    print(f"Extracted database count => {len(list(database_count.keys()))}  total table count => {len(list(table_count.elements()))}")
 
 
 def compare_db_tables(config, data_source):
