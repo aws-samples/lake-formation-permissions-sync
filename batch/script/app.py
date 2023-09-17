@@ -20,7 +20,6 @@ def get_config(s3_config_bucket,s3_config_file ):
     body_content = s3.get_object(Bucket=s3_config_bucket, Key=s3_config_file)['Body'].read().decode('utf-8')
     config = ConfigParser()
     config.read_string(body_content)
-    #config.read("glue_config.conf")
     return config
 
 
@@ -216,39 +215,39 @@ def extract_database(source_region, output_file_name, db_list):
     table_paginator = glue_client.get_paginator("get_tables")
     partition_paginator = glue_client.get_paginator("get_partitions")
     db_paginator = glue_client.get_paginator("get_databases")
+    database_data_file = tempfile.NamedTemporaryFile(mode='w+b', delete=False)
     for page in db_paginator.paginate():
-        database_data_file = tempfile.TemporaryFile(mode='w+')
         for db in page['DatabaseList']:
             if (db_list == ['ALL_DATABASE'] or (db['Name'] in db_list)):
                 print (f"Database {db['Name']} matched with list of databases to be extracted")
                 col_to_be_removed = ['CreateTime', 'CatalogId','VersionId']
                 _db = [db.pop(key, '') for key in col_to_be_removed]
-                database_data_file.write(f"database\t{db['Name']}\t\t{json.dumps(db)}\n")
+                database_data_file.write(f"database\t{db['Name']}\t\t{json.dumps(db)}\n".encode('utf-8'))
                 database_count[db['Name']] += 1
                 for page in table_paginator.paginate(DatabaseName=db['Name']):
                     for table in page['TableList']:
                         print(f"Processing table {table['Name']}")
-                        col_to_be_removed = ['CatalogId','DatabaseName','LastAccessTime', 'CreateTime', 'UpdateTime', 'CreatedBy','IsRegisteredWithLakeFormation','VersionId']
+                        col_to_be_removed = ['CatalogId','DatabaseName','LastAccessTime','CreateTime', 'UpdateTime', 'CreatedBy','IsRegisteredWithLakeFormation','VersionId']
                         _table = [table.pop(key,'') for key in col_to_be_removed]
-                        database_data_file.write(f"table\t{db['Name']}\t{table['Name']}\t{json.dumps(table)}\n")
+                        database_data_file.write(f"table\t{db['Name']}\t{table['Name']}\t{json.dumps(table)}\n".encode('utf-8'))
                         table_count[db['Name']] += 1
                         for partition_page in partition_paginator.paginate(DatabaseName=db['Name'], TableName=table['Name']):
                             for partition in partition_page['Partitions']:
                                 print(f"Processing partition {partition['Values']} for table {table['Name']}")
                                 col_to_be_removed = ['CatalogId', 'DatabaseName', 'CreationTime', 'LastAccessTime']
                                 _partition = [partition.pop(key,'') for key in col_to_be_removed]
-                                database_data_file.write(f"partition\t{db['Name']}\t{table['Name']}\t{json.dumps(partition)}\n")
+                                database_data_file.write(f"partition\t{db['Name']}\t{table['Name']}\t{json.dumps(partition)}\n".encode('utf-8'))
                                 partition_count[db['Name']] += 1
-        for db_name in table_count.keys():
-            print(f"{db_name}=>table_count:{table_count[db_name]}")
-        database_data_file.seek(0)
-        print (f"database_data_file.name => {database_data_file.name}")
-        with open(database_data_file.name, 'rb') as rf:
-            wr.s3.upload(local_file=rf, path=output_file_name)
-            print(f"Stored data in database_data_file.name {database_data_file.name}")
-            print(f"Output_file_name {output_file_name}")
-    print(f"Extracted database count => {len(list(database_count.keys()))}  total table count => {len(list(table_count.elements()))}")
-
+                                for db_name in table_count.keys():
+                                    print(f"{db_name}=>table_count:{table_count[db_name]}")
+                                    print (f"database_data_file.name => {database_data_file}")
+                                    print(f"Extracted database count => {len(list(database_count.keys()))}  total table count => {len(list(table_count.elements()))}")
+        # Once all databases are processed, upload the consolidated data to S3
+        database_data_file.close()
+        with open(database_data_file.name, 'rb') as file_for_upload:
+            wr.s3.upload(local_file=file_for_upload, path=output_file_name)
+            print(f"Stored consolidated data in {database_data_file}")
+        os.remove(database_data_file.name)
 
 def compare_db_tables(config, data_source):
     source_region = config[data_source]['source_region']
