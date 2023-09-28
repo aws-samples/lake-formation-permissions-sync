@@ -61,16 +61,18 @@ class GlueRestoreOnDemandStack(Stack):
             config_filename = 'glue_config.conf'         
         aws_glue.CfnJob(self, "LFRestoreOnDemandGlueJob",role=glue_role.role_arn,
                 command=aws_glue.CfnJob.JobCommandProperty(
-                    name="pythonshell",
-                    python_version="3.9",
-                    
+                    name="glueetl",
+                    python_version="3",
                     script_location="s3://"+script_bucket.bucket_name+"/app.py"
                 ),
                 default_arguments={
                     '--CONFIG_BUCKET':config_bucket,
-                    '--CONFIG_FILE_KEY': config_filename
+                    '--CONFIG_FILE_KEY': config_filename,
+                    '--additional-python-modules': 'awswrangler == 3.4.0'
                 },
-                max_capacity=1
+                glue_version= "4.0",
+                worker_type="G.1X",
+                number_of_workers = 2
             )
         
 
