@@ -11,6 +11,9 @@ from collections import Counter
 from configparser import ConfigParser
 from urllib.parse import urlparse, urlunparse
 from awsglue.utils import getResolvedOptions
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+MAX_WORKERS = 10
 
 information_schema_name = "information_schema"
 df_index = ['table_schema', 'table_name']
@@ -163,6 +166,24 @@ def create_or_update_partition(glue_client, db_name, table_name, partition_data,
         print(f"Failed to create partition {partition_data['Values']}. Reason: {e}")
         raise e
 
+def process_object_data_line(glue_client, object_data_line, update_table_s3_location, table_s3_mapping):
+    object_type, db_name, object_name, object_data = object_data_line.split("\t")
+    print(f"Processing object_type {object_type} {db_name} {object_name} ")
+    if object_type == 'database':
+        database_data = json.loads(object_data)
+        if update_table_s3_location:
+            database_data = update_database_location(database_data, table_s3_mapping)
+        create_database(glue_client, database_data)
+    elif object_type == 'table':
+        table_data = json.loads(object_data)
+        if update_table_s3_location:
+            table_data = update_table_location(table_data, table_s3_mapping)
+        create_table(glue_client, db_name, table_data)
+    elif object_type == 'partition':
+        partition_data = json.loads(object_data)
+        create_or_update_partition(glue_client, db_name, object_name, partition_data, update_table_s3_location, table_s3_mapping)
+
+
 def restore_data(config, data_source, glue_client, update_table_s3_location, table_s3_mapping):
     print("Restoring database...")
     database_count = Counter()
@@ -173,28 +194,18 @@ def restore_data(config, data_source, glue_client, update_table_s3_location, tab
     wr.s3.download(path=s3_path, local_file=f)
     f.seek(0)
     rf = open(f.name, "r+t")
-    for object_data_line in rf.readlines():
-        object_type, db_name, object_name, object_data = object_data_line.split("\t")
-        print(f"Processing object_type {object_type} {db_name} {object_name} ")
-        if object_type == 'database':
-            database_data = json.loads(object_data)
-            if update_table_s3_location:
-                database_data = update_database_location(database_data, table_s3_mapping)
-            create_database(glue_client, database_data)
-            database_count[db_name] += 1
-        elif object_type == 'table':
-            table_data = json.loads(object_data)
-            if update_table_s3_location:
-                table_data = update_table_location(table_data, table_s3_mapping)
-            create_table(glue_client, db_name, table_data)
-            table_count[db_name] += 1
-        elif object_type == 'partition':
-            partition_data = json.loads(object_data)
-            create_or_update_partition(glue_client, db_name, object_name, partition_data, update_table_s3_location, table_s3_mapping)
-            partition_count[db_name] += 1
+    object_data_lines = rf.readlines()
     rf.close()
-    for db_name in database_count.keys():
-        print(f"{db_name}=>table_count:{table_count[db_name]} partition_count:{partition_count[db_name]}")
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = [executor.submit(process_object_data_line, glue_client, line, update_table_s3_location, table_s3_mapping) for line in object_data_lines]
+        for future in as_completed(futures):
+            try:
+                future.result()
+            except Exception as exc:
+                print(f'Generated an exception: {exc}')
+                raise exc
+
     print(f"Restored database count => {len(list(database_count.keys()))}  table count => {len(list(table_count.elements()))}  partition count => {len(list(partition_count.elements()))}")
 
 def get_tables(source_region, data_source, db_list):
