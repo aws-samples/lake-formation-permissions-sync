@@ -28,9 +28,11 @@ key_alias = {
     'expression': 'Expression',
     'externaldatafilteringallowlist' : 'ExternalDataFilteringAllowList',
     'filterexpression': 'FilterExpression',
+    'force': 'Force',
     'id': 'Id',
     'indexname': 'IndexName',
     'inputformat': 'InputFormat',
+    'iceberginput': 'IcebergInput',
     'keys': 'Keys',
     'lastaccesstime': 'LastAccessTime',
     'lastanalyzedtime': 'LastAnalyzedTime',
@@ -39,8 +41,10 @@ key_alias = {
     'lftags': 'LFTags',
     'location': 'Location',
     'locationuri': 'LocationUri',
+    'metadataoperation': 'MetadataOperation',
     'name': 'Name',
     'numberofbuckets': 'NumberOfBuckets',
+    'opentableformatinput': 'OpenTableFormatInput',
     'outputformat': 'OutputFormat',
     'owner': 'Owner',
     'parameters': 'Parameters',
@@ -68,6 +72,7 @@ key_alias = {
     'skewedcolumnvaluelocationmaps': 'SkewedColumnValueLocationMaps',
     'skewedcolumnvalues': 'SkewedColumnValues',
     'skewedinfo': 'SkewedInfo',
+    'skiparchive': 'SkipArchive',
     'sortcolumns': 'SortColumns',
     'sortorder': 'SortOrder',
     'storagedescriptor': 'StorageDescriptor',
@@ -92,7 +97,8 @@ key_alias = {
     'viewexpandedtext': 'ViewExpandedText',
     'partitioninputlist': 'PartitionInputList',
     'tagvaluestoadd': 'TagValuesToAdd',
-    'tagvaluestodelete': 'TagValuesToDelete'
+    'tagvaluestodelete': 'TagValuesToDelete',
+    'versionid': 'VersionId',
 }
 
 
