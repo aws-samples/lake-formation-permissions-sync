@@ -1,206 +1,291 @@
-# Glue Catalog and Lake Formation Permissions replication 
+# Glue Catalog and Lake Formation Permissions Replication
 
-This utility is developed to create alternate backup of Glue Catalog objects and LakeFormation permissions and replicate to a target region. 
-There are two modes of this backup process.
+Cross-region replication for AWS Glue Catalog objects, Lake Formation permissions, and Iceberg metadata. Supports both one-time batch sync and continuous realtime replication via CloudTrail events.
+
+## Features
+
+- **Batch mode** — Full catalog bootstrap via AWS Glue ETL. Replicates all databases, tables, partitions, and Lake Formation permissions to a target region.
+- **Realtime mode** — Continuous replication via CloudTrail event streaming. Picks up Glue and Lake Formation changes within minutes.
+- **Iceberg support** — Remaps `metadata_location`, `previous_metadata_location`, and rewrites Iceberg metadata JSON files in S3 to point to target-region buckets.
+- **S3 location remapping** — Rewrites `StorageDescriptor.Location`, `AdditionalLocations`, and all S3 URIs (including `s3a://`) for the target region.
+- **CloudTrail fallback** — Handles oversized CloudTrail events (>256KB) by fetching table definitions directly from the source Glue service.
+- **Checkpoint with high-water-mark** — DynamoDB transactional checkpoint handles out-of-order CloudTrail events without manual intervention.
+- **Monitoring dashboard** — Live Streamlit dashboard showing sync status, events, errors, and configuration.
+
+## Project Structure
+
+```
+lake-formation-permissions-sync/
+├── config/                         # Configuration (single source of truth)
+│   └── glue_config.conf            #   All settings for batch + realtime
+├── batch/                          # Batch sync (Glue ETL job)
+│   ├── script/app.py               #   Main batch processing script
+│   └── infra/                      #   CDK stacks for Glue job + LF admin role
+├── realtime/                       # Realtime sync (Lambda + CloudTrail)
+│   ├── event_collector/            #   Lambda: pulls CloudTrail events into DynamoDB
+│   ├── event_replicator/           #   Lambda: replays events to target region
+│   ├── target_admin_setup/         #   Lambda: sets up LF admin in target region
+│   ├── infra/                      #   CDK stack for Lambda deployment
+│   └── shared/                     #   Shared config utilities
+├── dashboard/                      # Monitoring UI
+│   └── dashboard.py                #   Streamlit live dashboard
+├── tests/                          # Unit tests (182 tests)
+├── pyproject.toml                  # Project metadata + uv/pip config
+├── requirements.txt                # Python dependencies
+└── requirements-dev.txt            # Dev dependencies (testing, linting)
+```
 
 ## Prerequisites
-- Install [AWS CLI](https://aws.amazon.com/cli/).
-- Install [AWS CDK](https://aws.amazon.com/cdk/).
-- Install [Python](https://www.python.org/downloads/).
-- An AWS account for use with deployment and testing.
-- Updated [configuration file](./realtime/lf-dr-cdk/config/glue-lf-config.conf) with options to customize Lake Formation restore from a source region to a target region. Once you upload your configuration file to an S3 bucket, make note of the configuration S3 bucket name and the backup file bucket name specified in the configuration file.
+
+- [AWS CLI](https://aws.amazon.com/cli/) configured for your source region.
+- [AWS CDK](https://aws.amazon.com/cdk/) v2 installed and bootstrapped.
+- Python 3.10+.
+- An AWS account with Lake Formation admin permissions in both source and target regions.
+
+## Quick Start
+
+### 1. Install dependencies
+
+Using pip:
+```bash
+pip install -r requirements.txt
+```
+
+Using uv (recommended):
+```bash
+uv sync
+```
+
+For development (includes pytest, pytest-cov, mypy, flake8, black, isort):
+```bash
+pip install -r requirements-dev.txt
+# or
+uv sync --extra dev
+```
+
+### 2. Configure
+
+Edit [`config/glue_config.conf`](./config/glue_config.conf) with your source/target regions, database list, S3 bucket mappings, and CloudTrail lookup window. This single configuration file is shared by both batch and realtime modes. See [Configuration Options](#configuration-options) for details.
+
+### 3. Deploy and run batch sync (bootstrap)
+
+The batch job is the default way to bootstrap your target region. It performs a full one-time replication of all Glue catalog objects and Lake Formation permissions.
+
+```bash
+cd batch/infra/
+
+# First time only — bootstrap CDK
+cdk bootstrap \
+  --context config_bucket_name="YOUR-CONFIG-BUCKET" \
+  --context backup_bucket_name="YOUR-BACKUP-BUCKET" \
+  --context target_region="us-west-2" \
+  --all
+
+# Deploy the stack
+cdk deploy \
+  --context config_bucket_name="YOUR-CONFIG-BUCKET" \
+  --context backup_bucket_name="YOUR-BACKUP-BUCKET" \
+  --context target_region="us-west-2" \
+  --all
+```
+
+Replace `config_bucket_name` with the S3 bucket that holds `glue_config.conf`, `backup_bucket_name` with the bucket for catalog backup JSON files, and `target_region` with the target AWS region.
+
+After the CDK deployment completes, run the Glue job from the AWS Glue Studio console using the **Run** button, or trigger it via the CLI:
+
+```bash
+aws glue start-job-run --job-name LFRestoreOnDemandGlueJob
+```
+
+The job reads `glue_config.conf` from S3, extracts databases, tables, partitions, and Lake Formation permissions from the source region, and replicates them to the target region.
+
+### 4. Deploy realtime sync (continuous)
+
+Once the batch bootstrap is complete, deploy the realtime stack to keep the target region in sync with ongoing changes:
+
+```bash
+cd realtime/infra/
+
+# First time only — bootstrap CDK
+cdk bootstrap \
+  --context config_file_key="config/glue_config.conf" \
+  --context config_file_bucket="YOUR-CONFIG-BUCKET" \
+  --context target_region="us-west-2" \
+  --context eventbridge_schedule_min="1" \
+  --all
+
+# Deploy the stack
+cdk deploy \
+  --context config_file_key="config/glue_config.conf" \
+  --context config_file_bucket="YOUR-CONFIG-BUCKET" \
+  --context target_region="us-west-2" \
+  --context eventbridge_schedule_min="1" \
+  --all
+```
+
+To override the Lambda runtime (default: `python3.13`), pass `--context lambda_runtime=python3.12` (supports `python3.10` through `python3.13`).
+
+To pass a named AWS profile, add `--profile <aws_profile>` to any CDK command.
+
+### 5. Run the dashboard
+
+```bash
+cd dashboard/
+streamlit run dashboard.py
+```
+
+The dashboard connects live to DynamoDB using your AWS credentials and shows event activity, processing status, errors, and full configuration visibility.
 
 ## Batch Mode
- 
- This mode is suitable for creating a replica of existing Glue objects and LakeFormation permissions
 
-![Lake_Formation_Batch](img/LakeFormationDRBatch.png)
+The batch job performs a full one-time replication of Glue catalog objects and Lake Formation permissions to a target region via an AWS Glue ETL job. This is the required first step — run the batch sync to bootstrap the target region before enabling realtime replication.
 
-## Prerequisites for Batch mode
-- Updated [configuration file](./batch/glue_config.conf) with options to customize Lake Formation restore from a source region to a target region. See this [`description`](#configuration-options) for deatils about the configuration options. Once you upload your configuration file to an S3 bucket, make note of the configuration S3 bucket name and the backup file bucket name specified in the configuration file. 
-
+![Lake Formation Batch](img/LakeFormationDRBatch.png)
 
 ## Realtime Mode
 
- This mode is suitable for replicating ongoing changes once the existing setup is in sync with the target region. The source and target regions can be defined in [configuration file](./realtime/lf-dr-cdk/config/glue-lf-config.conf)
+Suitable for continuous replication of ongoing changes once the initial batch sync is complete.
 
-![Lake_Formation Realtime](img/LakeFormationDRRealTime.png)
+![Lake Formation Realtime](img/LakeFormationDRRealTime.png)
 
-Currently the following events are replicated via this changes:
+Currently replicated events:
 
-- BatchRevokePermissions,  
-- BatchGrantPermissions,   
-- CreateLFTag,
-- DeleteLFTag ,
-- GrantPermissions,   
-- RevokePermissions,  
-- CreateDatabase,   
-- DeleteDatabase,
-- UpdateDatabase,
-- CreateTable,
-- BatchCreatePartition,
-- UpdateTable,
-- DeleteTable,  
-- RegisterResource,
-- PutDataLakeSettings,    
-- AddLFTagsToResource,
+- CreateDatabase, UpdateDatabase, DeleteDatabase
+- CreateTable, UpdateTable, DeleteTable
+- CreatePartition, BatchCreatePartition
+- GrantPermissions, RevokePermissions
+- BatchGrantPermissions, BatchRevokePermissions
+- CreateLFTag, DeleteLFTag
+- RegisterResource, DeregisterResource
+- PutDataLakeSettings, AddLFTagsToResource
 
-The following event is not supported due to associated Cloudtrail request limitations. 
+The following event is not supported due to CloudTrail request limitations: CreateDataCellsFilter.
 
-- CreateDataCellsFilter
+This deployment creates:
 
-This project creates the following objects:
+- A Lambda function (`event_collector`) to pull records from CloudTrail
+- An EventBridge rule to trigger the collector on a configurable schedule
+- A DynamoDB table to store pulled CloudTrail records
+- A Lambda function (`event_replicator`) to process DynamoDB stream records and replay them to the target region
+- An SQS dead-letter queue for failed events
+- IAM roles with least-privilege policies for CloudTrail, Glue, Lake Formation (16 specific actions, no wildcards), and DynamoDB access
 
- * A Lambda function to pull records from Cloudtrail
- * An event rule to run the lambda function above every one minute
- * A DynamoDB table to store pulled Cloudtrail records for Lakeformation and Glue service for request where an object is modified successfully
- * A Lambda function to process these DynamoDB streamed records
- * Lambda role to pull Cloudtrail records, insert data in the DynamodDB table and the replicate changes in Glue and LakeFormation
- * TODO : SNS notification for failures
+## Configuration Options
 
-## Prerequisites for Realtime mode
-- Updated [configuration file](./realtime/lf-dr-cdk/config/glue-lf-config.conf) with options to customize Lake Formation restore from a source region to a target region. See this [`description`](#configuration-options) for deatils about the configuration options.
+The config file uses INI format with these key sections:
 
-## Deployment
-- [Configure AWS CLI in your source region](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html).
-- [Bootstrap AWS CDK in your source region](https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping.html).
-- From the command line, clone this repository using "git clone url" where "url" can be found when you click the "Clone" button on this repository.
-- Change directory to the newly cloned project.
+| Section | Key | Description |
+|---|---|---|
+| `Operation` | `sync_glue_catalog` | Enable/disable Glue catalog replication |
+| `Operation` | `sync_lf_permissions` | Enable/disable Lake Formation permissions replication |
+| `Operation` | `delete_target_catalog_objects` | Delete objects in target that don't exist in source |
+| `Target_s3_update` | `update_table_s3_location` | Remap S3 locations in table definitions |
+| `Target_s3_update` | `rewrite_iceberg_metadata` | Rewrite Iceberg metadata JSON files in S3 |
+| `AwsDataCatalog` | `source_region` | Source AWS region |
+| `AwsDataCatalog` | `destination_region` | Target AWS region |
+| `AwsDataCatalog` | `database_list` | Python list of databases to replicate (or `['ALL_DATABASE']`) |
+| `AwsDataCatalog` | `S3BucketMapping` / `target_s3_locations` | Python dict mapping source buckets to target buckets |
+| `AwsDataCatalog` | `cloudtrail_lookup_hour_duration` | Hours of CloudTrail history to scan (realtime only) |
 
-The `cdk.json` file tells the CDK Toolkit how to execute your app.
+## Testing
 
-This project is set up like a standard Python project.  The initialization
-process also creates a virtualenv within this project, stored under the .env
-directory.  To create the virtualenv it assumes that there is a `python3`
-(or `python` for Windows) executable in your path with access to the `venv`
-package. If for any reason the automatic creation of the virtualenv fails,
-you can create the virtualenv manually.
+Run the full test suite (182 tests) with coverage:
 
-To manually create a virtualenv on MacOS and Linux:
-
-```
-$ python -m venv .env
+```bash
+python -m pytest tests/ -v
 ```
 
-After the init process completes and the virtualenv is created, you can use the following
-step to activate your virtualenv.
+Coverage is configured in `pyproject.toml` and runs automatically (minimum threshold: 70%). To run without coverage:
 
-```
-$ source .env/bin/activate
-```
-
-If you are a Windows platform, you would activate the virtualenv like this:
-
-```
-% .env\Scripts\activate.bat
+```bash
+python -m pytest tests/ -v --no-cov
 ```
 
-Once the virtualenv is activated, you can install the required dependencies.
+Run a specific test file:
 
-```
-$ pip install -r requirements.txt
-```
-
-### CDK stack Deployment
-At this point you can now start deployment of CDK code.
-
-
-**Step 1: Navigate to location 
-```~/lake-formation-permissions-sync/realtime/lf-dr-cdk/```. 
-Initialize AWS CDK for first time only. If AWS CDK is already initialized then skip to Step 2.**
-
-Option 1: With default AWS profile
-```
-cdk bootstrap --context config_file_key="config/glue-lf-config.conf" --context config_file_bucket="lf-metadata-artifact-bucket" --context target_region="us-west-2" --context eventbridge_schedule_min="1" --all
+```bash
+python -m pytest tests/test_batch_app.py -v
+python -m pytest tests/test_batch_app_comprehensive.py -v
+python -m pytest tests/test_realtime_lambda.py -v
+python -m pytest tests/test_cloudtrail_to_boto3.py -v
+python -m pytest tests/test_event_collector.py -v
+python -m pytest tests/test_target_admin_setup.py -v
+python -m pytest tests/test_config_loader.py -v
+python -m pytest tests/test_cdk_stacks.py -v
 ```
 
-Option 2: With passing AWS profile name:
-```
-cdk bootstrap --profile <aws_profile> --context config_file_key="config/glue-lf-config.conf" --context config_file_bucket="lf-metadata-artifact-bucket" --context target_region="us-west-2" --context eventbridge_schedule_min="1" --all
-```
+## Type Checking
 
-Replace the config_file_key, config_file_bucket (s3 bucket where config file can be placed), target_region and eventbridge_schedule_min values with your preferred settings.
-
-**Step 2: Deploy CDK stack with following command:**
-
-Option 1: With default AWS profile
-```
-cdk deploy --context config_file_key="config/glue-lf-config.conf" --context config_file_bucket="lf-metadata-artifact-bucket" --context target_region="us-west-2" --context eventbridge_schedule_min="1" --all
+```bash
+mypy batch/script/app.py realtime/
 ```
 
-Option 2: With passing AWS profile name:
-```
-cdk deploy --profile <aws_profile> --context config_file_key="config/glue-lf-config.conf" --context config_file_bucket="lf-metadata-artifact-bucket" --context target_region="us-west-2" --context eventbridge_schedule_min="1" --all 
-```
-Replace the config_file_key, config_file_bucket (s3 bucket where config file can be placed), target_region and eventbridge_schedule_min values with your preferred settings.
+mypy is configured in `pyproject.toml` for Python 3.10 with `ignore_missing_imports` enabled.
 
-**Step 3: Clean up**
+## Linting
 
-Option 1: With default AWS profile
-```
-cdk destroy --context config_file_key="config/glue-lf-config.conf" --context config_file_bucket="lf-metadata-artifact-bucket" --context target_region="us-west-2" --context eventbridge_schedule_min="1" --all
+```bash
+flake8 --max-line-length=120 batch/script/app.py realtime/ tests/ dashboard/
+black --check --line-length=120 .
+isort --check --profile=black --line-length=120 .
 ```
 
-Option 2: With passing AWS profile name:
+## Clean Up
+
+**Batch stack:**
+
+```bash
+cd batch/infra/
+cdk destroy \
+  --context config_bucket_name="YOUR-CONFIG-BUCKET" \
+  --context backup_bucket_name="YOUR-BACKUP-BUCKET" \
+  --context target_region="us-west-2" \
+  --all
 ```
-cdk destroy --profile <aws_profile> --context config_file_key="config/glue-lf-config.conf" --context config_file_bucket="lf-metadata-artifact-bucket" --context target_region="us-west-2" --context eventbridge_schedule_min="1" --all
+
+**Realtime stack:**
+
+```bash
+cd realtime/infra/
+cdk destroy \
+  --context config_file_key="config/glue_config.conf" \
+  --context config_file_bucket="YOUR-CONFIG-BUCKET" \
+  --context target_region="us-west-2" \
+  --context eventbridge_schedule_min="1" \
+  --all
 ```
 
-Replace the config_file_key, config_file_bucket (s3 bucket where config file can be placed), target_region and eventbridge_schedule_min values with your preferred settings.
+The bootstrapping stack created through `cdk bootstrap` is retained. To fully clean up, delete the `CDKToolkit` stack via the CloudFormation console and empty the associated S3 bucket.
 
-You’ll be asked:
-```
-Are you sure you want to delete: CdkWorkshopStack (y/n)?
-```
-Hit “y” and you’ll see your stack being destroyed.
+## Verifying the Setup
 
-The bootstrapping stack created through ```cdk bootstrap``` still exists. If you plan on using the CDK in the future (we hope you do!) do not delete this stack.
+1. Create a database in the source region from the AWS Glue console. The source and target regions are configured in the [configuration file](./config/glue_config.conf).
 
-If you would like to delete this stack, it will have to be done through the CloudFormation console. Head over to the CloudFormation console and delete the ```CDKToolkit``` stack. The S3 bucket created will be retained by default, so if you want to avoid any unexpected charges, be sure to head to the S3 console and empty + delete the bucket generated from bootstrapping.
+   ![Create Database](img/GlueCreateDatabase.png)
+   ![Database in source region](img/GlueDatabaseNVirginia.png)
 
+2. Check the DynamoDB table `glue_lf_events` for the CreateDatabase event. The `Processed` flag should be `Y`, indicating successful replication.
 
-## Testing (optional)
+   ![DynamoDB Event Entry](img/DynamoDBEventEntry.png)
 
-The following steps are only to test the setup. 
+3. Verify the database exists in the target region.
 
-### Steps to replicate Glue Objects and LakeFormation Permissions
+   ![Database in target region](img/GlueDatabaseOregon.png)
 
-1. Create a Database in the source region from AWS Glue console. In this testing scenario, we have used us-east-1 (N. Virginia) as the source region. The source and target region can be configured in the [configuration file](./realtime/lf-dr-cdk/config/glue-lf-config.conf) along with S3 bucket mapping.
+## FAQ
 
-![Create Database](img/GlueCreateDatabase.png)
+**Can I replicate changes to another AWS account?**
 
+Lake Formation permissions are tightly coupled with IAM roles. This utility replays the original API calls without modification, so the target region must have IAM roles with the same names. Cross-account replication is possible if the underlying IAM permissions are managed, but is not supported out of the box.
 
-![Database Created in source region](img/GlueDatabaseNVirginia.png)
+**How do I report bugs or request enhancements?**
 
-2. Check DynamoDB Table ```glue_lf_events``` to check if event is created for CreateDatabase in the source region. Note that the Processed flag is set to Y. This indicates that the database has been replicated in the target region. 
+Open an issue on this repository.
 
-![DynamoDB Entry Created for CreateDatabase Event](img/DynamoDBEventEntry.png)
+## Security
 
-3. Check the replicated database in the target region.
+See [CONTRIBUTING](CONTRIBUTING.md) for more information.
 
-![Database Created in target region](img/GlueDatabaseOregon.png)
+## License
 
-
-
-
-## Useful commands
-
- * `cdk ls`          list all stacks in the app
- * `cdk synth`       emits the synthesized CloudFormation template
- * `cdk deploy`      deploy this stack to your default AWS account/region
- * `cdk diff`        compare deployed stack with current state
- * `cdk docs`        open CDK documentation
-
-FAQ:
-- Can I replicate the changes to another account?
-
-  LakeFormation permissions are highly coupled with the IAM roles and permissions. 
-  To ensure exact replication of changes this utility does not modify the original request and if the target region does not have
-  the role with same name and permissions then the grants will fail, that's the reason the execution of the utility is limited to an account only. 
-  The raw requests are always available to extend to beyond one account if the underlying permissions are managed.
-- How can I report of bugs or request enhancement?
-
-  The utility is in the active developement. If you encounter any bugs or request enhancements, please communicate through the issues and it will be addressed. 
-
-
-
+This library is licensed under the MIT-0 License. See the [LICENSE](LICENSE) file.

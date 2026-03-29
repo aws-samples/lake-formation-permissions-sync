@@ -1,0 +1,1608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Lake Formation Sync</title>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg:#fafafa; --white:#fff; --text:#1a1a2e; --text-secondary:#6b7280;
+  --text-tertiary:#9ca3af; --border:#e5e7eb; --border-light:#f3f4f6;
+  --accent:#6366f1; --accent-light:#eef2ff; --accent-hover:#4f46e5;
+  --green:#10b981; --green-light:#ecfdf5; --green-text:#065f46;
+  --red:#ef4444; --red-light:#fef2f2; --red-text:#991b1b;
+  --amber:#f59e0b; --amber-light:#fffbeb; --amber-text:#92400e;
+  --blue:#3b82f6; --blue-light:#eff6ff;
+  --radius:12px; --radius-sm:8px; --radius-lg:16px;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.05); --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
+  --shadow-lg:0 4px 12px rgba(0,0,0,.08);
+  --transition:all .2s cubic-bezier(.4,0,.2,1);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;font-size:14px;line-height:1.5;}
+
+/* Layout */
+.layout{display:flex;min-height:100vh;}
+.sidebar{width:240px;background:var(--white);border-right:1px solid var(--border);padding:20px 0;display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:50;}
+.sidebar-logo{padding:0 20px 24px;display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px;letter-spacing:-.3px;}
+.sidebar-logo svg{width:28px;height:28px;}
+.sidebar-nav{flex:1;padding:0 8px;}
+.nav-section{padding:16px 12px 6px;font-size:11px;font-weight:600;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.8px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:var(--radius-sm);color:var(--text-secondary);font-size:13.5px;font-weight:500;cursor:pointer;transition:var(--transition);margin-bottom:1px;}
+.nav-item:hover{background:var(--border-light);color:var(--text);}
+.nav-item.active{background:var(--accent-light);color:var(--accent);}
+.nav-item svg{width:18px;height:18px;flex-shrink:0;}
+.nav-badge{margin-left:auto;background:var(--red);color:#fff;font-size:11px;font-weight:600;padding:1px 7px;border-radius:10px;min-width:20px;text-align:center;}
+.sidebar-footer{padding:12px 20px;border-top:1px solid var(--border);}
+.main{margin-left:240px;flex:1;min-height:100vh;}
+.topbar{position:sticky;top:0;background:rgba(250,250,250,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 32px;height:56px;display:flex;align-items:center;justify-content:space-between;z-index:40;}
+.topbar-title{font-size:15px;font-weight:600;letter-spacing:-.2px;}
+.topbar-actions{display:flex;align-items:center;gap:8px;}
+.content{padding:28px 32px;}
+
+/* Components */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--white);color:var(--text);font-size:13px;font-weight:500;cursor:pointer;transition:var(--transition);font-family:inherit;white-space:nowrap;}
+.btn:hover{border-color:#d1d5db;box-shadow:var(--shadow-sm);}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent);}
+.btn-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover);box-shadow:0 2px 8px rgba(99,102,241,.3);}
+.btn-sm{padding:5px 12px;font-size:12px;border-radius:6px;}
+.btn-ghost{border-color:transparent;background:transparent;}
+.btn-ghost:hover{background:var(--border-light);border-color:transparent;box-shadow:none;}
+.btn-danger{color:var(--red);border-color:var(--red);}
+.btn-danger:hover{background:var(--red);color:#fff;}
+.btn-success{color:var(--green);border-color:var(--green);}
+.btn-success:hover{background:var(--green);color:#fff;}
+
+.card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:24px;transition:var(--transition);}
+.card:hover{box-shadow:var(--shadow);}
+.card-flat{box-shadow:none;}
+.card-flat:hover{box-shadow:none;}
+
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500;}
+.badge-green{background:var(--green-light);color:var(--green-text);}
+.badge-red{background:var(--red-light);color:var(--red-text);}
+.badge-amber{background:var(--amber-light);color:var(--amber-text);}
+.badge-blue{background:var(--blue-light);color:var(--accent);}
+.badge-neutral{background:var(--border-light);color:var(--text-secondary);}
+
+.dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.dot-green{background:var(--green);}
+.dot-red{background:var(--red);}
+.dot-amber{background:var(--amber);}
+.dot-blue{background:var(--accent);}
+.pulse{animation:pulse 2s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+
+.grid{display:grid;gap:16px;}
+.grid-3{grid-template-columns:repeat(3,1fr);}
+.grid-2{grid-template-columns:repeat(2,1fr);}
+.grid-4{grid-template-columns:repeat(4,1fr);}
+.gap-20{gap:20px;}
+.gap-24{gap:24px;}
+.mt-20{margin-top:20px;}
+.mt-24{margin-top:24px;}
+.mt-16{margin-top:16px;}
+.mt-12{margin-top:12px;}
+.mt-8{margin-top:8px;}
+
+/* Tables — Attio-style clean tables */
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;}
+th{text-align:left;padding:10px 16px;font-size:12px;font-weight:600;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);background:var(--bg);}
+td{padding:12px 16px;border-bottom:1px solid var(--border-light);font-size:13.5px;vertical-align:middle;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:rgba(99,102,241,.02);}
+.td-mono{font-family:'SF Mono','Fira Code',monospace;font-size:12px;color:var(--text-secondary);}
+
+/* Inputs */
+input,select,textarea{font-family:inherit;font-size:13.5px;padding:9px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--white);color:var(--text);width:100%;transition:var(--transition);outline:none;}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(99,102,241,.1);}
+input::placeholder{color:var(--text-tertiary);}
+label{display:block;font-size:12.5px;font-weight:500;color:var(--text-secondary);margin-bottom:5px;}
+
+/* Progress bar */
+.progress-bar{height:4px;background:var(--border-light);border-radius:2px;overflow:hidden;}
+.progress-fill{height:100%;border-radius:2px;transition:width .6s ease;}
+
+/* Stat card */
+.stat-label{font-size:12.5px;color:var(--text-secondary);font-weight:500;}
+.stat-value{font-size:32px;font-weight:700;letter-spacing:-.5px;line-height:1.1;margin-top:6px;}
+.stat-change{font-size:12px;font-weight:500;margin-top:6px;display:flex;align-items:center;gap:4px;}
+
+/* Empty state */
+.empty-state{text-align:center;padding:60px 20px;color:var(--text-secondary);}
+.empty-state svg{width:48px;height:48px;color:var(--text-tertiary);margin-bottom:16px;}
+.empty-state h3{font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px;}
+.empty-state p{font-size:13px;max-width:360px;margin:0 auto;}
+
+/* Modal — Attio style: centered, subtle shadow */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:200;animation:fadeIn .15s ease;}
+.modal{background:var(--white);border-radius:var(--radius-lg);padding:0;width:520px;max-height:85vh;overflow:hidden;box-shadow:0 24px 48px rgba(0,0,0,.12);animation:slideUp .2s ease;}
+.modal-header{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
+.modal-header h2{font-size:16px;font-weight:600;letter-spacing:-.2px;}
+.modal-body{padding:24px;overflow-y:auto;max-height:calc(85vh - 140px);}
+.modal-footer{padding:16px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;background:var(--bg);}
+@keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+@keyframes slideUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+
+/* Timeline */
+.timeline-item{display:flex;gap:12px;padding:12px 0;position:relative;}
+.timeline-icon{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px;}
+.timeline-content{flex:1;min-width:0;}
+.timeline-title{font-size:13.5px;font-weight:500;}
+.timeline-time{font-size:12px;color:var(--text-tertiary);}
+.timeline-line{position:absolute;left:15px;top:44px;bottom:-12px;width:1px;background:var(--border-light);}
+
+/* Credential card */
+.cred-field{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg);border-radius:var(--radius-sm);margin-bottom:8px;}
+.cred-field label{margin:0;width:140px;flex-shrink:0;font-size:12.5px;}
+.cred-field input{background:var(--white);}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px;}
+::-webkit-scrollbar-thumb:hover{background:#9ca3af;}
+
+@media(max-width:900px){.sidebar{display:none;}.main{margin-left:0;}.grid-3,.grid-4{grid-template-columns:repeat(2,1fr);}.grid-2{grid-template-columns:1fr;}.content{padding:20px 16px;}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>const {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef
+} = React;
+
+/* ─── Pure SVG chart (zero dependencies) ─── */
+function MiniAreaChart({
+  data,
+  dataKey,
+  color = '#6366f1',
+  height = 200,
+  showGrid = true,
+  showLabels = true
+}) {
+  if (!data || !data.length) return null;
+  const W = 600,
+    H = height,
+    padL = showLabels ? 36 : 0,
+    padB = showLabels ? 28 : 0,
+    padT = 12,
+    padR = 12;
+  const vals = data.map(d => d[dataKey] || 0);
+  const mx = Math.max(...vals, 1);
+  const cW = W - padL - padR,
+    cH = H - padT - padB;
+  const pts = vals.map((v, i) => [padL + i / (vals.length - 1) * cW, padT + cH - v / mx * cH]);
+  const line = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p[0] + ' ' + p[1]).join(' ');
+  const area = line + ` L${pts[pts.length - 1][0]} ${padT + cH} L${pts[0][0]} ${padT + cH} Z`;
+  const gridLines = showGrid ? [0, .25, .5, .75, 1].map(f => padT + cH * f) : [];
+  return /*#__PURE__*/React.createElement("svg", {
+    viewBox: `0 0 ${W} ${H}`,
+    style: {
+      width: '100%',
+      height
+    },
+    preserveAspectRatio: "none"
+  }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("linearGradient", {
+    id: `g_${dataKey}`,
+    x1: "0",
+    y1: "0",
+    x2: "0",
+    y2: "1"
+  }, /*#__PURE__*/React.createElement("stop", {
+    offset: "0%",
+    stopColor: color,
+    stopOpacity: ".15"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "100%",
+    stopColor: color,
+    stopOpacity: "0"
+  }))), gridLines.map((y, i) => /*#__PURE__*/React.createElement("line", {
+    key: i,
+    x1: padL,
+    x2: W - padR,
+    y1: y,
+    y2: y,
+    stroke: "#f3f4f6",
+    strokeWidth: "1"
+  })), showLabels && data.filter((_, i) => i % Math.ceil(data.length / 6) === 0).map((d, i, arr) => {
+    const x = padL + data.indexOf(d) / (data.length - 1) * cW;
+    return /*#__PURE__*/React.createElement("text", {
+      key: i,
+      x: x,
+      y: H - 4,
+      fontSize: "10",
+      fill: "#9ca3af",
+      textAnchor: "middle"
+    }, d.hour || d.label || '');
+  }), showLabels && [0, .5, 1].map((f, i) => {
+    const v = Math.round(mx * (1 - f));
+    return /*#__PURE__*/React.createElement("text", {
+      key: i,
+      x: padL - 6,
+      y: padT + cH * f + 4,
+      fontSize: "10",
+      fill: "#9ca3af",
+      textAnchor: "end"
+    }, v);
+  }), /*#__PURE__*/React.createElement("path", {
+    d: area,
+    fill: `url(#g_${dataKey})`
+  }), /*#__PURE__*/React.createElement("path", {
+    d: line,
+    fill: "none",
+    stroke: color,
+    strokeWidth: "2",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }));
+}
+
+// ─── Icons (inline SVG for zero dependencies) ───
+const Icon = {
+  home: /*#__PURE__*/React.createElement("svg", {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.8",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"
+  }), /*#__PURE__*/React.createElement("polyline", {
+    points: "9 22 9 12 15 12 15 22"
+  })),
+  sync: /*#__PURE__*/React.createElement("svg", {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.8",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, /*#__PURE__*/React.createElement("polyline", {
+    points: "23 4 23 10 17 10"
+  }), /*#__PURE__*/React.createElement("polyline", {
+    points: "1 20 1 14 7 14"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
+  })),
+  table: /*#__PURE__*/React.createElement("svg", {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.8",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, /*#__PURE__*/React.createElement("rect", {
+    x: "3",
+    y: "3",
+    width: "18",
+    height: "18",
+    rx: "2"
+  }), /*#__PURE__*/React.createElement("line", {
+    x1: "3",
+    y1: "9",
+    x2: "21",
+    y2: "9"
+  }), /*#__PURE__*/React.createElement("line", {
+    x1: "3",
+    y1: "15",
+    x2: "21",
+    y2: "15"
+  }), /*#__PURE__*/React.createElement("line", {
+    x1: "9",
+    y1: "3",
+    x2: "9",
+    y2: "21"
+  })),
+  alert: /*#__PURE__*/React.createElement("svg", {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.8",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
+  }), /*#__PURE__*/React.createElement("line", {
+    x1: "12",
+    y1: "9",
+    x2: "12",
+    y2: "13"
+  }), /*#__PURE__*/React.createElement("line", {
+    x1: "12",
+    y1: "17",
+    x2: "12.01",
+    y2: "17"
+  })),
+  settings: /*#__PURE__*/React.createElement("svg", {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.8",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, /*#__PURE__*/React.createElement("circle", {
+    cx: "12",
+    cy: "12",
+    r: "3"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"
+  })),
+  play: /*#__PURE__*/React.createElement("svg", {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.8",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, /*#__PURE__*/React.createElement("polygon", {
+    points: "5 3 19 12 5 21 5 3"
+  })),
+  check: /*#__PURE__*/React.createElement("svg", {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "2",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, /*#__PURE__*/React.createElement("polyline", {
+    points: "20 6 9 17 4 12"
+  })),
+  x: /*#__PURE__*/React.createElement("svg", {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "2",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, /*#__PURE__*/React.createElement("line", {
+    x1: "18",
+    y1: "6",
+    x2: "6",
+    y2: "18"
+  }), /*#__PURE__*/React.createElement("line", {
+    x1: "6",
+    y1: "6",
+    x2: "18",
+    y2: "18"
+  })),
+  clock: /*#__PURE__*/React.createElement("svg", {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.8",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, /*#__PURE__*/React.createElement("circle", {
+    cx: "12",
+    cy: "12",
+    r: "10"
+  }), /*#__PURE__*/React.createElement("polyline", {
+    points: "12 6 12 12 16 14"
+  })),
+  db: /*#__PURE__*/React.createElement("svg", {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.8",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, /*#__PURE__*/React.createElement("ellipse", {
+    cx: "12",
+    cy: "5",
+    rx: "9",
+    ry: "3"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"
+  })),
+  key: /*#__PURE__*/React.createElement("svg", {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.8",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"
+  })),
+  arrow: /*#__PURE__*/React.createElement("svg", {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "2",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, /*#__PURE__*/React.createElement("line", {
+    x1: "5",
+    y1: "12",
+    x2: "19",
+    y2: "12"
+  }), /*#__PURE__*/React.createElement("polyline", {
+    points: "12 5 19 12 12 19"
+  })),
+  refresh: /*#__PURE__*/React.createElement("svg", {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.8",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, /*#__PURE__*/React.createElement("polyline", {
+    points: "1 4 1 10 7 10"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M3.51 15a9 9 0 102.13-9.36L1 10"
+  })),
+  layers: /*#__PURE__*/React.createElement("svg", {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.8",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, /*#__PURE__*/React.createElement("polygon", {
+    points: "12 2 2 7 12 12 22 7 12 2"
+  }), /*#__PURE__*/React.createElement("polyline", {
+    points: "2 17 12 22 22 17"
+  }), /*#__PURE__*/React.createElement("polyline", {
+    points: "2 12 12 17 22 12"
+  }))
+};
+
+// ─── Mock Data ───
+const EVENT_TYPES = ['CreateDatabase', 'DeleteDatabase', 'UpdateDatabase', 'CreateTable', 'UpdateTable', 'DeleteTable', 'GrantPermissions', 'RevokePermissions', 'BatchGrantPermissions', 'BatchRevokePermissions', 'CreateLFTag', 'DeleteLFTag', 'PutDataLakeSettings', 'AddLFTagsToResource', 'BatchCreatePartition', 'RegisterResource'];
+function rid() {
+  return Math.random().toString(36).slice(2, 9);
+}
+function rtime(mAgo) {
+  const d = new Date(Date.now() - mAgo * 60000);
+  return d.toISOString().replace('T', ' ').slice(0, 19);
+}
+function genSyncHistory(n) {
+  return Array.from({
+    length: n
+  }, (_, i) => {
+    const s = Math.random();
+    return {
+      id: rid(),
+      type: i === n - 1 ? 'Batch' : 'Realtime',
+      startedAt: rtime(i * 45 + 10),
+      duration: Math.floor(Math.random() * 180 + 20),
+      eventsProcessed: Math.floor(Math.random() * 60 + 5),
+      eventsFailed: s > .85 ? Math.floor(Math.random() * 4 + 1) : 0,
+      status: s > .85 ? 'partial' : s > .05 ? 'success' : 'failed'
+    };
+  }).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+}
+function genTableVersions() {
+  const dbs = ['analytics', 'marketing', 'finance', 'data_lake', 'ml_features'];
+  const tables = ['users', 'events', 'transactions', 'campaigns', 'models', 'sessions', 'conversions'];
+  return Array.from({
+    length: 18
+  }, () => {
+    const db = dbs[Math.floor(Math.random() * dbs.length)];
+    const tb = tables[Math.floor(Math.random() * tables.length)];
+    const v = Math.floor(Math.random() * 12 + 1);
+    return {
+      db,
+      table: tb,
+      version: v,
+      lastSynced: rtime(Math.floor(Math.random() * 200)),
+      sourceRegion: 'us-east-1',
+      targetRegion: 'us-west-2',
+      status: Math.random() > .9 ? 'drift' : 'synced',
+      columns: Math.floor(Math.random() * 20 + 3),
+      partitions: Math.floor(Math.random() * 365)
+    };
+  });
+}
+function genErrors() {
+  return [{
+    id: rid(),
+    time: rtime(5),
+    event: 'PutDataLakeSettings',
+    error: 'AccessDeniedException',
+    detail: 'Lambda role lacks lakeformation:PutDataLakeSettings permission in us-west-2',
+    severity: 'high'
+  }, {
+    id: rid(),
+    time: rtime(23),
+    event: 'GrantPermissions',
+    error: 'EntityNotFoundException',
+    detail: 'Role arn:aws:iam::123:role/data-analyst not found in target region',
+    severity: 'medium'
+  }, {
+    id: rid(),
+    time: rtime(67),
+    event: 'CreateTable',
+    error: 'InvalidInputException',
+    detail: 'SerDe library not available in target region',
+    severity: 'high'
+  }, {
+    id: rid(),
+    time: rtime(120),
+    event: 'BatchCreatePartition',
+    error: 'AlreadyExistsException',
+    detail: 'Partition values [2024, 03] already exist (idempotent)',
+    severity: 'low'
+  }];
+}
+function genTimeline() {
+  return Array.from({
+    length: 24
+  }, (_, i) => ({
+    hour: `${String(23 - i).padStart(2, '0')}:00`,
+    synced: Math.floor(Math.random() * 40 + 8),
+    failed: Math.floor(Math.random() * 3),
+    pending: Math.floor(Math.random() * 6)
+  })).reverse();
+}
+
+// ─── Sub-Components ───
+function StatusDot({
+  status,
+  animate
+}) {
+  const colors = {
+    success: 'dot-green',
+    synced: 'dot-green',
+    partial: 'dot-amber',
+    failed: 'dot-red',
+    drift: 'dot-amber',
+    pending: 'dot-blue'
+  };
+  return /*#__PURE__*/React.createElement("span", {
+    className: `dot ${colors[status] || 'dot-blue'} ${animate ? 'pulse' : ''}`
+  });
+}
+function StatusBadge({
+  status
+}) {
+  const map = {
+    success: ['Synced', 'badge-green'],
+    synced: ['Synced', 'badge-green'],
+    partial: ['Partial', 'badge-amber'],
+    failed: ['Failed', 'badge-red'],
+    drift: ['Drift', 'badge-amber'],
+    pending: ['Pending', 'badge-blue']
+  };
+  const [label, cls] = map[status] || ['Unknown', 'badge-neutral'];
+  return /*#__PURE__*/React.createElement("span", {
+    className: `badge ${cls}`
+  }, /*#__PURE__*/React.createElement(StatusDot, {
+    status: status
+  }), label);
+}
+
+// ─── Modals ───
+function CredentialsModal({
+  show,
+  onClose,
+  onSave,
+  creds,
+  setCreds
+}) {
+  if (!show) return null;
+  return /*#__PURE__*/React.createElement("div", {
+    className: "modal-overlay",
+    onClick: onClose
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal",
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal-header"
+  }, /*#__PURE__*/React.createElement("h2", null, "AWS Credentials"), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-ghost btn-sm",
+    onClick: onClose,
+    style: {
+      padding: 4
+    }
+  }, Icon.x)), /*#__PURE__*/React.createElement("div", {
+    className: "modal-body"
+  }, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 13,
+      color: 'var(--text-secondary)',
+      marginBottom: 16
+    }
+  }, "Enter your AWS credentials to connect and deploy sync jobs. Credentials are stored locally in your browser only."), /*#__PURE__*/React.createElement("div", {
+    className: "cred-field"
+  }, /*#__PURE__*/React.createElement("label", null, "AWS Region (Source)"), /*#__PURE__*/React.createElement("input", {
+    value: creds.sourceRegion,
+    onChange: e => setCreds({
+      ...creds,
+      sourceRegion: e.target.value
+    }),
+    placeholder: "us-east-1"
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "cred-field"
+  }, /*#__PURE__*/React.createElement("label", null, "AWS Region (Target)"), /*#__PURE__*/React.createElement("input", {
+    value: creds.targetRegion,
+    onChange: e => setCreds({
+      ...creds,
+      targetRegion: e.target.value
+    }),
+    placeholder: "us-west-2"
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "cred-field"
+  }, /*#__PURE__*/React.createElement("label", null, "Access Key ID"), /*#__PURE__*/React.createElement("input", {
+    value: creds.accessKey,
+    onChange: e => setCreds({
+      ...creds,
+      accessKey: e.target.value
+    }),
+    placeholder: "AKIA..."
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "cred-field"
+  }, /*#__PURE__*/React.createElement("label", null, "Secret Access Key"), /*#__PURE__*/React.createElement("input", {
+    type: "password",
+    value: creds.secretKey,
+    onChange: e => setCreds({
+      ...creds,
+      secretKey: e.target.value
+    }),
+    placeholder: "Enter secret key"
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "cred-field"
+  }, /*#__PURE__*/React.createElement("label", null, "AWS Profile (optional)"), /*#__PURE__*/React.createElement("input", {
+    value: creds.profile,
+    onChange: e => setCreds({
+      ...creds,
+      profile: e.target.value
+    }),
+    placeholder: "default"
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "modal-footer"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "btn",
+    onClick: onClose
+  }, "Cancel"), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-primary",
+    onClick: () => {
+      onSave(creds);
+      onClose();
+    }
+  }, "Save & Connect"))));
+}
+function DeployModal({
+  show,
+  onClose,
+  mode
+}) {
+  const [step, setStep] = useState(0);
+  const steps = mode === 'batch' ? ['Validating credentials...', 'Creating Glue role...', 'Deploying GlueRestoreOnDemandStack...', 'Adding role as LF Admin in target...', 'Starting Glue job...', 'Done!'] : ['Validating credentials...', 'Synthesizing CDK template...', 'Deploying DynamoDB table & indexes...', 'Deploying CloudTrail pull Lambda...', 'Deploying Replicate event Lambda...', 'Creating EventBridge schedule...', 'Setting up DLQ...', 'Done!'];
+  useEffect(() => {
+    if (!show) {
+      setStep(0);
+      return;
+    }
+    const t = setInterval(() => setStep(s => Math.min(s + 1, steps.length - 1)), 1200);
+    return () => clearInterval(t);
+  }, [show]);
+  if (!show) return null;
+  const done = step >= steps.length - 1;
+  return /*#__PURE__*/React.createElement("div", {
+    className: "modal-overlay",
+    onClick: done ? onClose : undefined
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal",
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal-header"
+  }, /*#__PURE__*/React.createElement("h2", null, mode === 'batch' ? 'Initial Bootstrap' : 'Deploying Realtime Sync'), done && /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-ghost btn-sm",
+    onClick: onClose,
+    style: {
+      padding: 4
+    }
+  }, Icon.x)), /*#__PURE__*/React.createElement("div", {
+    className: "modal-body"
+  }, steps.map((s, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 12,
+      padding: '10px 0',
+      opacity: i <= step ? 1 : .35,
+      transition: 'opacity .3s'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 28,
+      height: 28,
+      borderRadius: '50%',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: i < step ? 'var(--green-light)' : i === step ? 'var(--accent-light)' : 'var(--border-light)',
+      color: i < step ? 'var(--green)' : i === step ? 'var(--accent)' : 'var(--text-tertiary)',
+      flexShrink: 0
+    }
+  }, i < step ? /*#__PURE__*/React.createElement("svg", {
+    width: "14",
+    height: "14",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "3",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, /*#__PURE__*/React.createElement("polyline", {
+    points: "20 6 9 17 4 12"
+  })) : i === step && !done ? /*#__PURE__*/React.createElement("svg", {
+    width: "14",
+    height: "14",
+    viewBox: "0 0 24 24",
+    style: {
+      animation: 'spin 1s linear infinite'
+    }
+  }, /*#__PURE__*/React.createElement("circle", {
+    cx: "12",
+    cy: "12",
+    r: "10",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "3",
+    strokeDasharray: "30 30"
+  })) : done && i === step ? /*#__PURE__*/React.createElement("svg", {
+    width: "14",
+    height: "14",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "3",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, /*#__PURE__*/React.createElement("polyline", {
+    points: "20 6 9 17 4 12"
+  })) : /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      fontWeight: 600
+    }
+  }, i + 1)), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 13.5,
+      fontWeight: i === step ? 500 : 400
+    }
+  }, s))), /*#__PURE__*/React.createElement("style", null, `@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`)), done && /*#__PURE__*/React.createElement("div", {
+    className: "modal-footer"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-primary",
+    onClick: onClose
+  }, "Done"))));
+}
+
+// ─── Pages ───
+function OverviewPage({
+  syncHistory,
+  errors,
+  timeline,
+  onNavigate
+}) {
+  const lastSync = syncHistory[0];
+  const successRate = syncHistory.length ? Math.round(syncHistory.filter(s => s.status === 'success').length / syncHistory.length * 100) : 0;
+  const totalEvents = syncHistory.reduce((a, s) => a + s.eventsProcessed, 0);
+  const totalFailed = syncHistory.reduce((a, s) => a + s.eventsFailed, 0);
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-4 gap-20"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-label"
+  }, "Last sync"), /*#__PURE__*/React.createElement("div", {
+    className: "stat-value",
+    style: {
+      fontSize: 22,
+      marginTop: 8
+    }
+  }, lastSync ? lastSync.startedAt.split(' ')[1] : '—'), /*#__PURE__*/React.createElement("div", {
+    className: "stat-change"
+  }, lastSync && /*#__PURE__*/React.createElement(StatusBadge, {
+    status: lastSync.status
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-label"
+  }, "Success rate"), /*#__PURE__*/React.createElement("div", {
+    className: "stat-value",
+    style: {
+      color: successRate > 90 ? 'var(--green)' : successRate > 70 ? 'var(--amber)' : 'var(--red)'
+    }
+  }, successRate, "%"), /*#__PURE__*/React.createElement("div", {
+    className: "stat-change",
+    style: {
+      color: 'var(--text-tertiary)'
+    }
+  }, "across ", syncHistory.length, " syncs")), /*#__PURE__*/React.createElement("div", {
+    className: "card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-label"
+  }, "Events processed"), /*#__PURE__*/React.createElement("div", {
+    className: "stat-value"
+  }, totalEvents.toLocaleString()), /*#__PURE__*/React.createElement("div", {
+    className: "stat-change",
+    style: {
+      color: 'var(--text-tertiary)'
+    }
+  }, "last 24 hours")), /*#__PURE__*/React.createElement("div", {
+    className: "card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-label"
+  }, "Errors"), /*#__PURE__*/React.createElement("div", {
+    className: "stat-value",
+    style: {
+      color: totalFailed > 0 ? 'var(--red)' : 'var(--green)'
+    }
+  }, totalFailed), totalFailed > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "stat-change",
+    style: {
+      cursor: 'pointer',
+      color: 'var(--accent)'
+    },
+    onClick: () => onNavigate('errors')
+  }, "View details \u2192"))), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-2 gap-20 mt-24"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 14,
+      fontWeight: 600
+    }
+  }, "Sync activity"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: 'var(--text-tertiary)'
+    }
+  }, "Last 24 hours")), /*#__PURE__*/React.createElement(MiniAreaChart, {
+    data: timeline,
+    dataKey: "synced",
+    color: "#6366f1",
+    height: 200
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "card"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 14,
+      fontWeight: 600
+    }
+  }, "Recent syncs"), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-ghost btn-sm",
+    onClick: () => onNavigate('syncs')
+  }, "View all")), /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Time"), /*#__PURE__*/React.createElement("th", null, "Type"), /*#__PURE__*/React.createElement("th", null, "Events"), /*#__PURE__*/React.createElement("th", null, "Status"))), /*#__PURE__*/React.createElement("tbody", null, syncHistory.slice(0, 5).map(s => /*#__PURE__*/React.createElement("tr", {
+    key: s.id
+  }, /*#__PURE__*/React.createElement("td", {
+    className: "td-mono"
+  }, s.startedAt.split(' ')[1]), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("span", {
+    className: `badge ${s.type === 'Batch' ? 'badge-blue' : 'badge-neutral'}`
+  }, s.type)), /*#__PURE__*/React.createElement("td", null, s.eventsProcessed), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(StatusBadge, {
+    status: s.status
+  })))))))), errors.filter(e => e.severity === 'high').length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "card mt-24",
+    style: {
+      borderColor: '#fecaca',
+      background: '#fffbfb'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: 'var(--red)'
+    }
+  }, Icon.alert), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 14,
+      fontWeight: 600,
+      color: 'var(--red-text)'
+    }
+  }, "Attention needed")), errors.filter(e => e.severity === 'high').slice(0, 2).map(e => /*#__PURE__*/React.createElement("div", {
+    key: e.id,
+    style: {
+      padding: '8px 0',
+      borderBottom: '1px solid #fee2e2'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13.5,
+      fontWeight: 500
+    }
+  }, e.event, ": ", e.error), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12.5,
+      color: 'var(--text-secondary)',
+      marginTop: 2
+    }
+  }, e.detail))), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-sm mt-12",
+    onClick: () => onNavigate('errors')
+  }, "View all errors")));
+}
+function SyncsPage({
+  syncHistory,
+  onDeploy
+}) {
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-2 gap-20",
+    style: {
+      marginBottom: 24
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 48,
+      height: 48,
+      borderRadius: '50%',
+      background: 'var(--accent-light)',
+      color: 'var(--accent)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    }
+  }, Icon.sync), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 15,
+      fontWeight: 600
+    }
+  }, "Realtime sync"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: 'var(--text-secondary)',
+      marginTop: 2
+    }
+  }, "Continuously replicates changes via CloudTrail events. This is the primary sync mechanism after initial setup."), /*#__PURE__*/React.createElement("span", {
+    className: "badge badge-green",
+    style: { marginTop: 8, display: 'inline-flex' }
+  }, /*#__PURE__*/React.createElement(StatusDot, { status: "success", animate: true }), "Active")), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-primary",
+    onClick: () => onDeploy('realtime')
+  }, Icon.play, /*#__PURE__*/React.createElement("span", null, "Deploy"))), /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 20,
+      borderStyle: 'dashed'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 48,
+      height: 48,
+      borderRadius: '50%',
+      background: 'var(--blue-light)',
+      color: 'var(--blue)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    }
+  }, Icon.db), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 15,
+      fontWeight: 600
+    }
+  }, "Initial batch sync"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: 'var(--text-secondary)',
+      marginTop: 2
+    }
+  }, "One-time full catalog bootstrap via Glue ETL. Run this first to replicate existing databases, tables, and permissions before enabling realtime sync."), /*#__PURE__*/React.createElement("span", {
+    className: "badge badge-neutral",
+    style: { marginTop: 8, display: 'inline-flex' }
+  }, "Run once")), /*#__PURE__*/React.createElement("button", {
+    className: "btn",
+    onClick: () => onDeploy('batch')
+  }, Icon.play, /*#__PURE__*/React.createElement("span", null, "Run")))), /*#__PURE__*/React.createElement("div", {
+    className: "card card-flat"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 15,
+      fontWeight: 600
+    }
+  }, "Sync history"), /*#__PURE__*/React.createElement("span", {
+    className: "badge badge-neutral"
+  }, syncHistory.length, " runs")), /*#__PURE__*/React.createElement("div", {
+    className: "table-wrap"
+  }, /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Started"), /*#__PURE__*/React.createElement("th", null, "Type"), /*#__PURE__*/React.createElement("th", null, "Duration"), /*#__PURE__*/React.createElement("th", null, "Processed"), /*#__PURE__*/React.createElement("th", null, "Errors"), /*#__PURE__*/React.createElement("th", null, "Status"))), /*#__PURE__*/React.createElement("tbody", null, syncHistory.map(s => /*#__PURE__*/React.createElement("tr", {
+    key: s.id
+  }, /*#__PURE__*/React.createElement("td", {
+    className: "td-mono"
+  }, s.startedAt), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("span", {
+    className: `badge ${s.type === 'Batch' ? 'badge-blue' : 'badge-neutral'}`
+  }, s.type)), /*#__PURE__*/React.createElement("td", null, s.duration, "s"), /*#__PURE__*/React.createElement("td", {
+    style: {
+      fontWeight: 500
+    }
+  }, s.eventsProcessed), /*#__PURE__*/React.createElement("td", null, s.eventsFailed > 0 ? /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: 'var(--red)',
+      fontWeight: 500
+    }
+  }, s.eventsFailed) : /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: 'var(--text-tertiary)'
+    }
+  }, "0")), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(StatusBadge, {
+    status: s.status
+  })))))))));
+}
+function TablesPage({
+  tableVersions
+}) {
+  const [search, setSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const filtered = useMemo(() => tableVersions.filter(t => {
+    const matchSearch = !search || t.table.includes(search.toLowerCase()) || t.db.includes(search.toLowerCase());
+    const matchStatus = filterStatus === 'all' || filterStatus === 'drift' && t.status === 'drift' || filterStatus === 'synced' && t.status === 'synced';
+    return matchSearch && matchStatus;
+  }), [tableVersions, search, filterStatus]);
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 10,
+      marginBottom: 20,
+      alignItems: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    placeholder: "Search tables or databases...",
+    value: search,
+    onChange: e => setSearch(e.target.value),
+    style: {
+      maxWidth: 320
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 4,
+      background: 'var(--white)',
+      border: '1px solid var(--border)',
+      borderRadius: 'var(--radius-sm)',
+      padding: 3
+    }
+  }, [['all', 'All'], ['synced', 'Synced'], ['drift', 'Drift']].map(([k, l]) => /*#__PURE__*/React.createElement("button", {
+    key: k,
+    className: `btn btn-ghost btn-sm`,
+    style: filterStatus === k ? {
+      background: 'var(--accent-light)',
+      color: 'var(--accent)'
+    } : {},
+    onClick: () => setFilterStatus(k)
+  }, l))), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12.5,
+      color: 'var(--text-tertiary)',
+      marginLeft: 'auto'
+    }
+  }, filtered.length, " tables")), /*#__PURE__*/React.createElement("div", {
+    className: "card card-flat"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "table-wrap"
+  }, /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Database"), /*#__PURE__*/React.createElement("th", null, "Table"), /*#__PURE__*/React.createElement("th", null, "Version"), /*#__PURE__*/React.createElement("th", null, "Columns"), /*#__PURE__*/React.createElement("th", null, "Partitions"), /*#__PURE__*/React.createElement("th", null, "Last synced"), /*#__PURE__*/React.createElement("th", null, "Regions"), /*#__PURE__*/React.createElement("th", null, "Status"))), /*#__PURE__*/React.createElement("tbody", null, filtered.map((t, i) => /*#__PURE__*/React.createElement("tr", {
+    key: i
+  }, /*#__PURE__*/React.createElement("td", {
+    style: {
+      fontWeight: 500
+    }
+  }, t.db), /*#__PURE__*/React.createElement("td", {
+    className: "td-mono"
+  }, t.table), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("span", {
+    className: "badge badge-neutral"
+  }, "v", t.version)), /*#__PURE__*/React.createElement("td", null, t.columns), /*#__PURE__*/React.createElement("td", null, t.partitions.toLocaleString()), /*#__PURE__*/React.createElement("td", {
+    className: "td-mono"
+  }, t.lastSynced), /*#__PURE__*/React.createElement("td", {
+    style: {
+      fontSize: 12
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: 'var(--text-secondary)'
+    }
+  }, t.sourceRegion), " ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: 'var(--text-tertiary)',
+      margin: '0 3px'
+    }
+  }, "\u2192"), " ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: 'var(--text-secondary)'
+    }
+  }, t.targetRegion)), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(StatusBadge, {
+    status: t.status
+  })))))))));
+}
+function ErrorsPage({
+  errors,
+  onRetry
+}) {
+  const sevColor = {
+    high: 'var(--red)',
+    medium: 'var(--amber)',
+    low: 'var(--text-tertiary)'
+  };
+  return /*#__PURE__*/React.createElement(React.Fragment, null, errors.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "empty-state"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: 'var(--green)',
+      marginBottom: 12
+    }
+  }, Icon.check), /*#__PURE__*/React.createElement("h3", null, "No errors"), /*#__PURE__*/React.createElement("p", null, "All sync operations completed successfully."))) : /*#__PURE__*/React.createElement("div", {
+    className: "card card-flat"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 15,
+      fontWeight: 600
+    }
+  }, "Sync errors"), /*#__PURE__*/React.createElement("span", {
+    className: "badge badge-red"
+  }, errors.length, " issues")), errors.map((e, i) => /*#__PURE__*/React.createElement("div", {
+    key: e.id,
+    className: "timeline-item"
+  }, i < errors.length - 1 && /*#__PURE__*/React.createElement("div", {
+    className: "timeline-line"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "timeline-icon",
+    style: {
+      background: e.severity === 'high' ? 'var(--red-light)' : e.severity === 'medium' ? 'var(--amber-light)' : 'var(--border-light)',
+      color: sevColor[e.severity]
+    }
+  }, Icon.alert), /*#__PURE__*/React.createElement("div", {
+    className: "timeline-content"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start'
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "timeline-title"
+  }, e.event, " ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: sevColor[e.severity],
+      fontSize: 12,
+      fontWeight: 600,
+      marginLeft: 6
+    }
+  }, e.error)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: 'var(--text-secondary)',
+      marginTop: 3
+    }
+  }, e.detail), /*#__PURE__*/React.createElement("div", {
+    className: "timeline-time mt-8"
+  }, e.time)), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-sm",
+    onClick: () => onRetry(e.id)
+  }, "Retry")))))));
+}
+/* ─── Helper components for Settings ─── */
+function SettingsRow({label, value, mono}) {
+  return /*#__PURE__*/React.createElement("div", {style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid var(--border-light)'}},
+    /*#__PURE__*/React.createElement("span", {style:{fontSize:12.5,color:'var(--text-secondary)'}}, label),
+    /*#__PURE__*/React.createElement("span", {style:{fontSize:13,fontWeight:500,fontFamily:mono?'SF Mono,Fira Code,monospace':'inherit',maxWidth:'60%',textAlign:'right',wordBreak:'break-all'}}, value || 'Not set')
+  );
+}
+function ToggleSwitch({checked, onChange, label}) {
+  return /*#__PURE__*/React.createElement("div", {style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:'1px solid var(--border-light)'}},
+    /*#__PURE__*/React.createElement("span", {style:{fontSize:13,fontWeight:500}}, label),
+    /*#__PURE__*/React.createElement("div", {onClick:onChange, style:{width:40,height:22,borderRadius:11,background:checked?'var(--accent)':'var(--border)',cursor:'pointer',position:'relative',transition:'var(--transition)'}},
+      /*#__PURE__*/React.createElement("div", {style:{width:18,height:18,borderRadius:9,background:'#fff',position:'absolute',top:2,left:checked?20:2,transition:'var(--transition)',boxShadow:'0 1px 3px rgba(0,0,0,.15)'}})
+    )
+  );
+}
+function SectionCard({title, subtitle, children}) {
+  return /*#__PURE__*/React.createElement("div", {className:"card"},
+    /*#__PURE__*/React.createElement("div", {style:{fontSize:15,fontWeight:600,marginBottom:4}}, title),
+    subtitle && /*#__PURE__*/React.createElement("div", {style:{fontSize:13,color:'var(--text-secondary)',marginBottom:16}}, subtitle),
+    children
+  );
+}
+
+function SettingsPage({creds, onOpenCreds, config, setConfig}) {
+  const [editingBucket, setEditingBucket] = useState(null);
+  const [newSource, setNewSource] = useState('');
+  const [newTarget, setNewTarget] = useState('');
+
+  function addBucketMapping() {
+    if (newSource && newTarget) {
+      setConfig({...config, s3BucketMapping: [...config.s3BucketMapping, {source: newSource, target: newTarget}]});
+      setNewSource(''); setNewTarget('');
+    }
+  }
+  function removeBucketMapping(idx) {
+    setConfig({...config, s3BucketMapping: config.s3BucketMapping.filter((_, i) => i !== idx)});
+  }
+  function addDatabase() {
+    if (config.newDatabaseName && !config.databaseList.includes(config.newDatabaseName)) {
+      setConfig({...config, databaseList: [...config.databaseList, config.newDatabaseName], newDatabaseName: ''});
+    }
+  }
+  function removeDatabase(name) {
+    setConfig({...config, databaseList: config.databaseList.filter(d => d !== name)});
+  }
+
+  return /*#__PURE__*/React.createElement(React.Fragment, null,
+
+    /* ── Row 1: Connection + Regions ── */
+    /*#__PURE__*/React.createElement("div", {className:"grid grid-2 gap-20"},
+
+      /* AWS Connection */
+      /*#__PURE__*/React.createElement(SectionCard, {title:"AWS connection", subtitle:"Credentials used to deploy and monitor sync jobs."},
+        /*#__PURE__*/React.createElement("div", {style:{background:'var(--bg)',borderRadius:'var(--radius-sm)',padding:16}},
+          /*#__PURE__*/React.createElement(SettingsRow, {label:"Source region", value:creds.sourceRegion}),
+          /*#__PURE__*/React.createElement(SettingsRow, {label:"Target region", value:creds.targetRegion}),
+          /*#__PURE__*/React.createElement(SettingsRow, {label:"Access key", value:creds.accessKey ? creds.accessKey.slice(0,4)+'••••••••••••' : 'Not set', mono:true}),
+          /*#__PURE__*/React.createElement("div", {style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0'}},
+            /*#__PURE__*/React.createElement("span", {style:{fontSize:12.5,color:'var(--text-secondary)'}}, "Status"),
+            creds.accessKey
+              ? /*#__PURE__*/React.createElement("span", {className:"badge badge-green"}, /*#__PURE__*/React.createElement(StatusDot, {status:"success"}), "Connected")
+              : /*#__PURE__*/React.createElement("span", {className:"badge badge-red"}, /*#__PURE__*/React.createElement(StatusDot, {status:"failed"}), "Not connected")
+          )
+        ),
+        /*#__PURE__*/React.createElement("button", {className:"btn mt-16", onClick:onOpenCreds}, Icon.key, /*#__PURE__*/React.createElement("span", null, "Update credentials"))
+      ),
+
+      /* Operations */
+      /*#__PURE__*/React.createElement(SectionCard, {title:"Operations", subtitle:"Toggle which operations run during sync."},
+        /*#__PURE__*/React.createElement(ToggleSwitch, {label:"Sync Glue catalog", checked:config.syncGlueCatalog, onChange:()=>setConfig({...config,syncGlueCatalog:!config.syncGlueCatalog})}),
+        /*#__PURE__*/React.createElement(ToggleSwitch, {label:"Sync Lake Formation permissions", checked:config.syncLfPermissions, onChange:()=>setConfig({...config,syncLfPermissions:!config.syncLfPermissions})}),
+        /*#__PURE__*/React.createElement(ToggleSwitch, {label:"Remap S3 locations for target region", checked:config.updateTableS3Location, onChange:()=>setConfig({...config,updateTableS3Location:!config.updateTableS3Location})}),
+        /*#__PURE__*/React.createElement(ToggleSwitch, {label:"Rewrite Iceberg metadata files", checked:config.rewriteIcebergMetadata, onChange:()=>setConfig({...config,rewriteIcebergMetadata:!config.rewriteIcebergMetadata})}),
+        /*#__PURE__*/React.createElement(ToggleSwitch, {label:"Delete extra objects in target", checked:config.deleteTargetCatalogObjects, onChange:()=>setConfig({...config,deleteTargetCatalogObjects:!config.deleteTargetCatalogObjects})}),
+        /*#__PURE__*/React.createElement("button", {className:"btn btn-primary mt-16"}, "Save operations")
+      )
+    ),
+
+    /* ── Row 2: Databases + S3 Bucket Mapping ── */
+    /*#__PURE__*/React.createElement("div", {className:"grid grid-2 gap-20 mt-20"},
+
+      /* Database List */
+      /*#__PURE__*/React.createElement(SectionCard, {title:"Database list", subtitle:"Databases to replicate. Use ALL_DATABASE for everything."},
+        /*#__PURE__*/React.createElement("div", {style:{display:'flex',flexWrap:'wrap',gap:8,marginBottom:16}},
+          config.databaseList.map((db,i) => /*#__PURE__*/React.createElement("span", {key:db, style:{display:'inline-flex',alignItems:'center',gap:6,padding:'5px 12px',background:'var(--accent-light)',color:'var(--accent)',borderRadius:20,fontSize:13,fontWeight:500,fontFamily:'SF Mono,Fira Code,monospace'}},
+            db,
+            /*#__PURE__*/React.createElement("span", {onClick:()=>removeDatabase(db), style:{cursor:'pointer',opacity:.6,fontSize:16,lineHeight:1}}, "\u00d7")
+          ))
+        ),
+        /*#__PURE__*/React.createElement("div", {style:{display:'flex',gap:8}},
+          /*#__PURE__*/React.createElement("input", {placeholder:"Add database name...", value:config.newDatabaseName, onChange:e=>setConfig({...config,newDatabaseName:e.target.value}), onKeyDown:e=>{if(e.key==='Enter')addDatabase()}, style:{flex:1}}),
+          /*#__PURE__*/React.createElement("button", {className:"btn btn-sm btn-primary", onClick:addDatabase}, "Add")
+        )
+      ),
+
+      /* S3 Bucket Mapping */
+      /*#__PURE__*/React.createElement(SectionCard, {title:"S3 bucket mapping", subtitle:"Maps source buckets to target region equivalents."},
+        /*#__PURE__*/React.createElement("div", {style:{display:'flex',flexDirection:'column',gap:8,marginBottom:16}},
+          config.s3BucketMapping.map((m,i) => /*#__PURE__*/React.createElement("div", {key:i, style:{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',background:'var(--bg)',borderRadius:'var(--radius-sm)',fontSize:12.5,fontFamily:'SF Mono,Fira Code,monospace'}},
+            /*#__PURE__*/React.createElement("span", {style:{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, m.source),
+            /*#__PURE__*/React.createElement("span", {style:{color:'var(--text-tertiary)',flexShrink:0}}, "\u2192"),
+            /*#__PURE__*/React.createElement("span", {style:{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, m.target),
+            /*#__PURE__*/React.createElement("span", {onClick:()=>removeBucketMapping(i), style:{cursor:'pointer',color:'var(--red)',opacity:.6,fontSize:16,lineHeight:1,flexShrink:0}}, "\u00d7")
+          ))
+        ),
+        /*#__PURE__*/React.createElement("div", {style:{display:'flex',gap:8,alignItems:'end'}},
+          /*#__PURE__*/React.createElement("div", {style:{flex:1}}, /*#__PURE__*/React.createElement("label", null, "Source bucket"), /*#__PURE__*/React.createElement("input", {placeholder:"source-bucket-name", value:newSource, onChange:e=>setNewSource(e.target.value)})),
+          /*#__PURE__*/React.createElement("div", {style:{flex:1}}, /*#__PURE__*/React.createElement("label", null, "Target bucket"), /*#__PURE__*/React.createElement("input", {placeholder:"target-bucket-name", value:newTarget, onChange:e=>setNewTarget(e.target.value)})),
+          /*#__PURE__*/React.createElement("button", {className:"btn btn-sm btn-primary", style:{marginBottom:1}, onClick:addBucketMapping}, "Add")
+        )
+      )
+    ),
+
+    /* ── Row 3: Schedule + Lambda + Storage ── */
+    /*#__PURE__*/React.createElement("div", {className:"grid grid-3 gap-20 mt-20"},
+
+      /* Sync Schedule */
+      /*#__PURE__*/React.createElement(SectionCard, {title:"Sync schedule", subtitle:"How often CloudTrail is polled for events."},
+        /*#__PURE__*/React.createElement("div", {style:{display:'flex',flexDirection:'column',gap:12}},
+          /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("label", null, "EventBridge interval (minutes)"),
+            /*#__PURE__*/React.createElement("input", {type:"number", value:config.scheduleMin, onChange:e=>setConfig({...config,scheduleMin:+e.target.value})})
+          ),
+          /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("label", null, "CloudTrail lookup window (hours)"),
+            /*#__PURE__*/React.createElement("input", {type:"number", value:config.lookupHours, onChange:e=>setConfig({...config,lookupHours:+e.target.value})})
+          ),
+          /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("label", null, "Batch restore parallelism"),
+            /*#__PURE__*/React.createElement("input", {type:"number", value:config.maxRestoreWorkers, onChange:e=>setConfig({...config,maxRestoreWorkers:+e.target.value})})
+          )
+        ),
+        /*#__PURE__*/React.createElement("button", {className:"btn btn-primary mt-16"}, "Save schedule")
+      ),
+
+      /* Lambda Configuration */
+      /*#__PURE__*/React.createElement(SectionCard, {title:"Lambda configuration", subtitle:"Runtime and timeout settings for Lambdas."},
+        /*#__PURE__*/React.createElement("div", {style:{background:'var(--bg)',borderRadius:'var(--radius-sm)',padding:16}},
+          /*#__PURE__*/React.createElement(SettingsRow, {label:"Runtime", value:config.lambdaRuntime}),
+          /*#__PURE__*/React.createElement(SettingsRow, {label:"CloudTrail pull timeout", value:config.lambdaTimeoutPull+'s'}),
+          /*#__PURE__*/React.createElement(SettingsRow, {label:"Replicate event timeout", value:config.lambdaTimeoutReplicate+'s'}),
+          /*#__PURE__*/React.createElement(SettingsRow, {label:"DynamoDB table", value:"glue_lf_events", mono:true}),
+          /*#__PURE__*/React.createElement(SettingsRow, {label:"Dead letter queue", value:"lfDRDeadLetterQueue", mono:true})
+        ),
+        /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:'var(--text-tertiary)',marginTop:12}}, "Lambda settings are managed via CDK. Redeploy to update.")
+      ),
+
+      /* Storage Paths */
+      /*#__PURE__*/React.createElement(SectionCard, {title:"Storage paths", subtitle:"S3 locations for backup and permission data."},
+        /*#__PURE__*/React.createElement("div", {style:{display:'flex',flexDirection:'column',gap:12}},
+          /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("label", null, "Backup S3 bucket"),
+            /*#__PURE__*/React.createElement("input", {value:config.backupFileBucket, onChange:e=>setConfig({...config,backupFileBucket:e.target.value})})
+          ),
+          /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("label", null, "Backup folder"),
+            /*#__PURE__*/React.createElement("input", {value:config.backupFileFolder, onChange:e=>setConfig({...config,backupFileFolder:e.target.value})})
+          ),
+          /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("label", null, "LF permissions bucket"),
+            /*#__PURE__*/React.createElement("input", {value:config.lfStorageBucket, onChange:e=>setConfig({...config,lfStorageBucket:e.target.value})})
+          ),
+          /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("label", null, "LF permissions folder"),
+            /*#__PURE__*/React.createElement("input", {value:config.lfStorageFolder, onChange:e=>setConfig({...config,lfStorageFolder:e.target.value})})
+          )
+        ),
+        /*#__PURE__*/React.createElement("button", {className:"btn btn-primary mt-16"}, "Save paths")
+      )
+    ),
+
+    /* ── Config file preview ── */
+    /*#__PURE__*/React.createElement("div", {className:"mt-20"},
+      /*#__PURE__*/React.createElement(SectionCard, {title:"Generated config preview", subtitle:"This is what will be written to glue_config.conf when you deploy."},
+        /*#__PURE__*/React.createElement("pre", {style:{background:'#1a1a2e',color:'#e2e8f0',padding:20,borderRadius:'var(--radius-sm)',fontSize:12.5,fontFamily:'SF Mono,Fira Code,monospace',lineHeight:1.7,overflow:'auto',maxHeight:320}},
+          `[Operation]\nsync_glue_catalog = ${config.syncGlueCatalog}\ndelete_target_catalog_objects = ${config.deleteTargetCatalogObjects}\nsync_lf_permissions = ${config.syncLfPermissions}\n\n[Target_s3_update]\nupdate_table_s3_location = ${config.updateTableS3Location}\nrewrite_iceberg_metadata = ${config.rewriteIcebergMetadata}\n\n[ListCatalog]\nlist_datasource = ['AwsDataCatalog']\n\n[AwsDataCatalog]\nsource_region = ${creds.sourceRegion}\ndestination_region = ${creds.targetRegion}\ncloudtrail_lookup_hour_duration = ${config.lookupHours}\ndatabase_list = ['${config.databaseList.join("', '")}']\nS3BucketMapping = {${config.s3BucketMapping.map(m=>`'${m.source}': '${m.target}'`).join(', ')}}\nbackup_file_bucket = ${config.backupFileBucket}\nbackup_file_folder = ${config.backupFileFolder}\n\n[LakeFormationPermissions]\nlf_storage_bucket = ${config.lfStorageBucket}\nlf_storage_file_folder = ${config.lfStorageFolder}\nlf_storage_file_name = ${config.lfStorageFileName}`
+        ),
+        /*#__PURE__*/React.createElement("div", {style:{display:'flex',gap:8,marginTop:12}},
+          /*#__PURE__*/React.createElement("button", {className:"btn btn-sm", onClick:()=>{navigator.clipboard.writeText(document.querySelector('pre').textContent)}}, "Copy to clipboard"),
+          /*#__PURE__*/React.createElement("button", {className:"btn btn-sm btn-primary"}, "Download config file")
+        )
+      )
+    )
+  );
+}
+
+// ─── App ───
+function App() {
+  const [page, setPage] = useState('overview');
+  const [showCreds, setShowCreds] = useState(false);
+  const [deployMode, setDeployMode] = useState(null);
+  const [creds, setCreds] = useState({
+    sourceRegion: 'us-east-1',
+    targetRegion: 'us-west-2',
+    accessKey: '',
+    secretKey: '',
+    profile: 'default'
+  });
+  const [config, setConfig] = useState({
+    scheduleMin: 5,
+    lookupHours: 1,
+    syncGlueCatalog: true,
+    syncLfPermissions: true,
+    deleteTargetCatalogObjects: false,
+    updateTableS3Location: true,
+    rewriteIcebergMetadata: true,
+    databaseList: ['cw_eafi', 'lakeformation_cloudtrail'],
+    s3BucketMapping: [
+      { source: 'lf-metadata-xxxxxxxxxxxx-us-east-1', target: 'lf-metadata-xxxxxxxxxxxx-us-west-2' }
+    ],
+    lfStorageBucket: 's3use1src',
+    lfStorageFolder: 'lf_permission_storage',
+    lfStorageFileName: 'lf_permissions.json',
+    backupFileBucket: 's3use1src',
+    backupFileFolder: 'glue_catalog_backup_storage',
+    backupFileName: 'glue_catalog_file_name.json',
+    lambdaRuntime: 'Python 3.13',
+    lambdaTimeoutPull: 300,
+    lambdaTimeoutReplicate: 900,
+    maxRestoreWorkers: 10,
+    newDatabaseName: ''
+  });
+  const [syncHistory] = useState(() => genSyncHistory(20));
+  const [tableVersions] = useState(genTableVersions);
+  const [errors, setErrors] = useState(genErrors);
+  const [timeline] = useState(genTimeline);
+  const pageTitle = {
+    overview: 'Overview',
+    syncs: 'Sync jobs',
+    tables: 'Tables & versions',
+    errors: 'Errors',
+    settings: 'Configuration'
+  };
+  function handleDeploy(mode) {
+    if (!creds.accessKey) {
+      setShowCreds(true);
+      return;
+    }
+    setDeployMode(mode);
+  }
+  return /*#__PURE__*/React.createElement("div", {
+    className: "layout"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "sidebar"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "sidebar-logo"
+  }, /*#__PURE__*/React.createElement("svg", {
+    viewBox: "0 0 32 32",
+    fill: "none"
+  }, /*#__PURE__*/React.createElement("rect", {
+    width: "32",
+    height: "32",
+    rx: "8",
+    fill: "#6366f1"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M10 22V10l6 4-6 4zm6-4l6 4V10l-6 4z",
+    fill: "#fff",
+    opacity: ".9"
+  })), "LF Sync"), /*#__PURE__*/React.createElement("nav", {
+    className: "sidebar-nav"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "nav-section"
+  }, "Monitor"), /*#__PURE__*/React.createElement("div", {
+    className: `nav-item ${page === 'overview' ? 'active' : ''}`,
+    onClick: () => setPage('overview')
+  }, Icon.home, /*#__PURE__*/React.createElement("span", null, "Overview")), /*#__PURE__*/React.createElement("div", {
+    className: `nav-item ${page === 'syncs' ? 'active' : ''}`,
+    onClick: () => setPage('syncs')
+  }, Icon.sync, /*#__PURE__*/React.createElement("span", null, "Sync jobs")), /*#__PURE__*/React.createElement("div", {
+    className: `nav-item ${page === 'tables' ? 'active' : ''}`,
+    onClick: () => setPage('tables')
+  }, Icon.layers, /*#__PURE__*/React.createElement("span", null, "Tables & versions")), /*#__PURE__*/React.createElement("div", {
+    className: `nav-item ${page === 'errors' ? 'active' : ''}`,
+    onClick: () => setPage('errors')
+  }, Icon.alert, /*#__PURE__*/React.createElement("span", null, "Errors"), errors.filter(e => e.severity === 'high').length > 0 && /*#__PURE__*/React.createElement("span", {
+    className: "nav-badge"
+  }, errors.filter(e => e.severity === 'high').length)), /*#__PURE__*/React.createElement("div", {
+    className: "nav-section",
+    style: {
+      marginTop: 8
+    }
+  }, "Manage"), /*#__PURE__*/React.createElement("div", {
+    className: `nav-item ${page === 'settings' ? 'active' : ''}`,
+    onClick: () => setPage('settings')
+  }, Icon.settings, /*#__PURE__*/React.createElement("span", null, "Configuration"))), /*#__PURE__*/React.createElement("div", {
+    className: "sidebar-footer"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8
+    }
+  }, creds.accessKey ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(StatusDot, {
+    status: "success",
+    animate: true
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12.5,
+      color: 'var(--text-secondary)'
+    }
+  }, "Connected to AWS")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(StatusDot, {
+    status: "failed"
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12.5,
+      color: 'var(--text-tertiary)',
+      cursor: 'pointer'
+    },
+    onClick: () => setShowCreds(true)
+  }, "Connect AWS"))))), /*#__PURE__*/React.createElement("div", {
+    className: "main"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "topbar"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "topbar-title"
+  }, pageTitle[page]), /*#__PURE__*/React.createElement("div", {
+    className: "topbar-actions"
+  }, page === 'overview' && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12.5,
+      color: 'var(--text-tertiary)',
+      marginRight: 4
+    }
+  }, creds.sourceRegion, " \u2192 ", creds.targetRegion), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-sm btn-primary",
+    onClick: () => handleDeploy('realtime')
+  }, Icon.play, /*#__PURE__*/React.createElement("span", null, "Deploy realtime")), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-sm",
+    onClick: () => handleDeploy('batch')
+  }, Icon.db, /*#__PURE__*/React.createElement("span", null, "Initial setup"))), page === 'syncs' && /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-sm btn-primary",
+    onClick: () => handleDeploy('realtime')
+  }, Icon.play, /*#__PURE__*/React.createElement("span", null, "New sync")), page === 'errors' && errors.length > 0 && /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-sm",
+    onClick: () => setErrors([])
+  }, "Dismiss all"))), /*#__PURE__*/React.createElement("div", {
+    className: "content"
+  }, page === 'overview' && /*#__PURE__*/React.createElement(OverviewPage, {
+    syncHistory: syncHistory,
+    errors: errors,
+    timeline: timeline,
+    onNavigate: setPage
+  }), page === 'syncs' && /*#__PURE__*/React.createElement(SyncsPage, {
+    syncHistory: syncHistory,
+    onDeploy: handleDeploy
+  }), page === 'tables' && /*#__PURE__*/React.createElement(TablesPage, {
+    tableVersions: tableVersions
+  }), page === 'errors' && /*#__PURE__*/React.createElement(ErrorsPage, {
+    errors: errors,
+    onRetry: id => setErrors(errors.filter(e => e.id !== id))
+  }), page === 'settings' && /*#__PURE__*/React.createElement(SettingsPage, {
+    creds: creds,
+    onOpenCreds: () => setShowCreds(true),
+    config: config,
+    setConfig: setConfig
+  }))), /*#__PURE__*/React.createElement(CredentialsModal, {
+    show: showCreds,
+    onClose: () => setShowCreds(false),
+    onSave: c => setCreds(c),
+    creds: creds,
+    setCreds: setCreds
+  }), /*#__PURE__*/React.createElement(DeployModal, {
+    show: !!deployMode,
+    onClose: () => setDeployMode(null),
+    mode: deployMode || 'realtime'
+  }));
+}
+ReactDOM.render(/*#__PURE__*/React.createElement(App, null), document.getElementById('root'));
+</script>
+</body>
+</html>

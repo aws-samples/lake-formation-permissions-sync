@@ -1,0 +1,13 @@
+# Core AWS dependencies
+boto3>=1.28.0,<2.0.0
+botocore>=1.31.0,<2.0.0
+aws-cdk-lib==2.245.0
+constructs>=10.0.0,<11.0.0
+
+# Dashboard
+streamlit
+plotly
+
+# Batch job (Glue environment provides these, but listed for reference)
+# awswrangler==3.9.1
+# awsglue

@@ -1,0 +1,14 @@
+-r requirements.txt
+
+# Testing
+pytest>=9.0.0
+pytest-cov>=5.0.0
+
+# Linting & formatting
+flake8
+black
+isort
+
+# Type checking
+mypy
+boto3-stubs

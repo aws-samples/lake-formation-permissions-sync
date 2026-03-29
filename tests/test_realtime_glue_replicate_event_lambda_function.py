@@ -1,19 +1,12 @@
-import unittest
-from lake-formation-pemissions-sync.realtime.glue-lf-replicate-event.lambda_function import get_s3_table_target_bucket_name
+"""Legacy test file — replaced by test_cloudtrail_to_boto3.py.
 
-class TestLambdaFunction(unittest.TestCase):
+The original import path was invalid Python (hyphens in module names,
+typo 'pemissions'). Tests have been migrated to test_cloudtrail_to_boto3.py
+with proper imports and expanded coverage.
+"""
 
-    def test_get_s3_table_target_bucket_name(self):
-        # Test cases for different table_location inputs
-        test_cases = [
-            ("s3://my-bucket/path/to/data", "my-bucket"),
-            ("s3://my-bucket-name/path/to/data/", "my-bucket-name"),
-            ("s3://my.bucket.name.with.dots/path/to/data", "my.bucket.name.with.dots"),
-        ]
-
-        for table_location, expected_bucket_name in test_cases:
-            result = get_s3_table_target_bucket_name(table_location)
-            self.assertEqual(result, expected_bucket_name)
-
-if __name__ == '__main__':
-    unittest.main()
+# Original broken import:
+# from lake-formation-pemissions-sync.realtime.event_replicator
+#   .lambda_function import get_s3_table_target_bucket_name
+#
+# See tests/test_cloudtrail_to_boto3.py for the replacement tests.

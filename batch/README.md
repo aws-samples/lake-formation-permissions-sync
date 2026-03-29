@@ -7,7 +7,7 @@ This project shows a way to build a highly available design that automates the A
 - Install [AWS CDK](https://aws.amazon.com/cdk/).
 - Install [Python](https://www.python.org/downloads/).
 - An AWS account for use with deployment and testing.
-- Updated [configuration file](./glue_config.conf) with options to customize Lake Formation restore from a source region to a target region. See this [`description`](#configuration-options) for deatils about the configuration options. Once you upload your configuration file to an S3 bucket, make note of the configuration S3 bucket name and the backup file bucket name specified in the configuration file. 
+- Updated [configuration file](../config/glue_config.conf) with options to customize Lake Formation restore from a source region to a target region. See this [`description`](#configuration-options) for details about the configuration options. Once you upload your configuration file to an S3 bucket, make note of the configuration S3 bucket name and the backup file bucket name specified in the configuration file. 
 
 ## Deployment
 - [Configure AWS CLI in your source region](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html).
@@ -29,8 +29,9 @@ source ./venv/bin/activate
 ```
 pip install -r requirements.txt
 ```
-- Use CDK to deploy the infrastructure and the Glue Python script using the following command:
+- Navigate to the CDK directory and deploy:
 ```
+cd batch/infra/
 cdk deploy --context config_bucket_name="ctldl" --context backup_bucket_name="s3use1src" --context target_region="us-west-2" --all
 ```
 Replace the config_bucket_name, backup_bucket_name, and the target_region with your settings specified in the configuration file. 
