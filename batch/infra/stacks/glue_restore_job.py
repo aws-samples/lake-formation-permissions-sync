@@ -136,7 +136,7 @@ class GlueRestoreOnDemandStack(Stack):
             default_arguments={
                 "--CONFIG_BUCKET": config_bucket,
                 "--CONFIG_FILE_KEY": config_filename,
-                "--additional-python-modules": "awswrangler==3.9.1",
+                "--additional-python-modules": "awswrangler==3.9.1,fastavro",
             },
             glue_version="5.0",
             worker_type="G.1X",

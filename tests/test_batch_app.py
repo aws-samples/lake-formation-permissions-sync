@@ -4,10 +4,12 @@ Covers:
 - update_location (S3 URL remapping via urlparse)
 - update_table_location (Hive, Iceberg metadata_location, previous_metadata_location, AdditionalLocations)
 - update_database_location
-- rewrite_iceberg_metadata (S3 metadata file rewriting)
+- rewrite_iceberg_metadata (S3 metadata file rewriting + .avro manifest rewriting)
+- _rewrite_avro_file / _rewrite_avro_record (Avro binary rewriting)
 - _process_restore_line ordering (database, table, partition routing)
 """
 
+import io
 import json
 import os
 import sys
@@ -256,6 +258,171 @@ class TestRewriteIcebergMetadata(unittest.TestCase):
     def test_none_uri_passthrough(self):
         result = app.rewrite_iceberg_metadata(None, self.mapping, "us-east-1")
         self.assertIsNone(result)
+
+    @patch.object(app, "get_client")
+    def test_rewrites_avro_manifest_files(self, mock_get_client):
+        """Verify that .avro manifest-list files referenced in metadata JSON are rewritten."""
+        import fastavro
+
+        mock_s3 = MagicMock()
+        mock_get_client.return_value = mock_s3
+
+        # --- Build a fake Avro manifest-list file with source bucket paths ---
+        manifest_list_schema = {
+            "type": "record",
+            "name": "manifest_file",
+            "fields": [
+                {"name": "manifest_path", "type": "string"},
+                {"name": "manifest_length", "type": "long"},
+                {"name": "partition_spec_id", "type": "int"},
+            ],
+        }
+        manifest_list_records = [
+            {
+                "manifest_path": "s3://src-bucket-east/warehouse/db/tbl/metadata/m0.avro",
+                "manifest_length": 1234,
+                "partition_spec_id": 0,
+            },
+        ]
+        avro_buf = io.BytesIO()
+        fastavro.writer(avro_buf, manifest_list_schema, manifest_list_records)
+        avro_bytes = avro_buf.getvalue()
+
+        # --- Build a fake Avro manifest file (the child m0.avro) ---
+        manifest_schema = {
+            "type": "record",
+            "name": "manifest_entry",
+            "fields": [
+                {"name": "status", "type": "int"},
+                {
+                    "name": "data_file",
+                    "type": {
+                        "type": "record",
+                        "name": "data_file",
+                        "fields": [
+                            {"name": "file_path", "type": "string"},
+                            {"name": "file_size_in_bytes", "type": "long"},
+                        ],
+                    },
+                },
+            ],
+        }
+        manifest_records = [
+            {
+                "status": 1,
+                "data_file": {
+                    "file_path": "s3://src-bucket-east/warehouse/db/tbl/data/part-00000.parquet",
+                    "file_size_in_bytes": 5678,
+                },
+            },
+        ]
+        child_avro_buf = io.BytesIO()
+        fastavro.writer(child_avro_buf, manifest_schema, manifest_records)
+        child_avro_bytes = child_avro_buf.getvalue()
+
+        # --- JSON metadata referencing the manifest-list .avro ---
+        metadata_json = json.dumps(
+            {
+                "format-version": 2,
+                "location": "s3://src-bucket-east/warehouse/db/tbl",
+                "snapshots": [
+                    {
+                        "snapshot-id": 100,
+                        "manifest-list": "s3://src-bucket-east/warehouse/db/tbl/metadata/snap-100.avro",
+                    }
+                ],
+            }
+        )
+
+        # --- Mock S3 responses: metadata JSON, manifest-list .avro, manifest .avro ---
+        def mock_get_object(Bucket, Key):
+            if Key.endswith(".metadata.json"):
+                return {"Body": MagicMock(read=MagicMock(return_value=metadata_json.encode("utf-8")))}
+            elif "snap-100.avro" in Key:
+                return {"Body": MagicMock(read=MagicMock(return_value=avro_bytes))}
+            elif "m0.avro" in Key:
+                return {"Body": MagicMock(read=MagicMock(return_value=child_avro_bytes))}
+            raise ValueError(f"Unexpected key: {Key}")
+
+        mock_s3.get_object.side_effect = mock_get_object
+
+        # --- Invoke ---
+        result = app.rewrite_iceberg_metadata(
+            "s3://src-bucket-east/warehouse/db/tbl/metadata/v2.metadata.json",
+            self.mapping,
+            "us-east-1",
+        )
+
+        self.assertEqual(result, "s3://tgt-bucket-west/warehouse/db/tbl/metadata/v2.metadata.json")
+
+        # Verify put_object was called 3 times: JSON + manifest-list .avro + manifest .avro
+        self.assertEqual(mock_s3.put_object.call_count, 3)
+
+        # Check the manifest-list .avro was rewritten
+        avro_puts = [
+            c for c in mock_s3.put_object.call_args_list if c[1].get("ContentType") == "application/avro"
+        ]
+        self.assertEqual(len(avro_puts), 2)
+
+        # Parse the rewritten manifest-list to verify paths are remapped
+        snap_put = [c for c in avro_puts if "snap-100" in c[1]["Key"]][0]
+        rewritten_records = list(fastavro.reader(io.BytesIO(snap_put[1]["Body"])))
+        self.assertEqual(
+            rewritten_records[0]["manifest_path"],
+            "s3://tgt-bucket-west/warehouse/db/tbl/metadata/m0.avro",
+        )
+
+        # Parse the rewritten manifest to verify data file paths are remapped
+        m0_put = [c for c in avro_puts if "m0.avro" in c[1]["Key"]][0]
+        rewritten_manifest = list(fastavro.reader(io.BytesIO(m0_put[1]["Body"])))
+        self.assertEqual(
+            rewritten_manifest[0]["data_file"]["file_path"],
+            "s3://tgt-bucket-west/warehouse/db/tbl/data/part-00000.parquet",
+        )
+
+
+class TestRewriteAvroRecord(unittest.TestCase):
+    """Test the _rewrite_avro_record and _collect_avro_uris helpers."""
+
+    def test_rewrites_nested_strings(self):
+        mapping = {"src-bucket": "tgt-bucket"}
+        record = {
+            "manifest_path": "s3://src-bucket/meta/m0.avro",
+            "data_file": {
+                "file_path": "s3://src-bucket/data/part-0.parquet",
+                "size": 100,
+            },
+            "tags": ["s3://src-bucket/tags/a.txt", "other"],
+        }
+        app._rewrite_avro_record(record, mapping)
+        self.assertEqual(record["manifest_path"], "s3://tgt-bucket/meta/m0.avro")
+        self.assertEqual(record["data_file"]["file_path"], "s3://tgt-bucket/data/part-0.parquet")
+        self.assertEqual(record["tags"][0], "s3://tgt-bucket/tags/a.txt")
+        self.assertEqual(record["tags"][1], "other")
+
+    def test_leaves_non_matching_strings(self):
+        mapping = {"src-bucket": "tgt-bucket"}
+        record = {"path": "s3://other-bucket/data/file.parquet"}
+        app._rewrite_avro_record(record, mapping)
+        self.assertEqual(record["path"], "s3://other-bucket/data/file.parquet")
+
+    def test_collect_avro_uris_finds_source_uris(self):
+        mapping = {"src-bucket": "tgt-bucket"}
+        record = {
+            "manifest_path": "s3://src-bucket/meta/m0.avro",
+            "data_file": {"file_path": "s3://src-bucket/data/part-0.parquet"},
+        }
+        uris: list[str] = []
+        app._collect_avro_uris(record, mapping, uris)
+        # Only .avro files are collected, not .parquet
+        self.assertEqual(uris, ["s3://src-bucket/meta/m0.avro"])
+
+    def test_collect_avro_uris_ignores_unmapped_buckets(self):
+        mapping = {"src-bucket": "tgt-bucket"}
+        record = {"manifest_path": "s3://other-bucket/meta/m0.avro"}
+        uris: list[str] = []
+        app._collect_avro_uris(record, mapping, uris)
+        self.assertEqual(uris, [])
 
 
 class TestProcessRestoreLine(unittest.TestCase):

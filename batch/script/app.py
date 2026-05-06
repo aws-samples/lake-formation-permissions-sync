@@ -8,6 +8,7 @@ to run as an AWS Glue ETL job.
 from __future__ import annotations
 
 import ast
+import io
 import json
 import logging
 import os
@@ -148,6 +149,115 @@ def update_table_location(table_data: dict, table_s3_mapping: dict[str, str]) ->
     return table_data
 
 
+def _remap_s3_string(value: str, table_s3_mapping: dict[str, str]) -> str:
+    """Replace source bucket references in a string with target buckets."""
+    for src_bkt, tgt_bkt in table_s3_mapping.items():
+        value = value.replace(f"s3://{src_bkt}/", f"s3://{tgt_bkt}/")
+        value = value.replace(f"s3a://{src_bkt}/", f"s3a://{tgt_bkt}/")
+    return value
+
+
+def _rewrite_avro_file(
+    s3_uri: str,
+    table_s3_mapping: dict[str, str],
+    s3_client,
+    target_bucket: str,
+    rewritten: set[str],
+) -> None:
+    """Download an Avro file from S3, rewrite all string fields that contain
+    S3 bucket references, and upload to the target bucket.
+
+    Iceberg uses Avro for manifest-list files (``snap-*.avro``) and manifest
+    files.  Both contain S3 paths as plain strings — in ``manifest_path``,
+    ``manifest-list``, and ``data_file.file_path`` among others.  Rather than
+    hard-coding field names we walk every record and rewrite any string that
+    matches a bucket in the mapping.
+
+    *rewritten* tracks already-processed URIs to avoid duplicate work when
+    multiple snapshots share the same manifest.
+    """
+    if s3_uri in rewritten:
+        return
+    rewritten.add(s3_uri)
+
+    parsed = urlparse(s3_uri)
+    source_bucket = parsed.netloc
+    key = parsed.path.lstrip("/")
+
+    if source_bucket not in table_s3_mapping:
+        return
+
+    try:
+        import fastavro
+    except ImportError:
+        logger.warning("fastavro not available — skipping Avro rewrite for %s", s3_uri)
+        return
+
+    try:
+        resp = s3_client.get_object(Bucket=source_bucket, Key=key)
+        raw_bytes = resp["Body"].read()
+
+        buf_in = io.BytesIO(raw_bytes)
+        reader = fastavro.reader(buf_in)
+        schema = reader.writer_schema
+
+        # Read all records, collecting source .avro URIs *before* rewriting
+        records = []
+        source_child_uris: list[str] = []
+        for record in reader:
+            _collect_avro_uris(record, table_s3_mapping, source_child_uris)
+            _rewrite_avro_record(record, table_s3_mapping)
+            records.append(record)
+
+        buf_out = io.BytesIO()
+        fastavro.writer(buf_out, schema, records)
+
+        s3_client.put_object(
+            Bucket=target_bucket,
+            Key=key,
+            Body=buf_out.getvalue(),
+            ContentType="application/avro",
+        )
+        logger.info("Rewrote Avro file: s3://%s/%s -> s3://%s/%s", source_bucket, key, target_bucket, key)
+
+        # Recursively rewrite any .avro files referenced within (manifests from manifest-lists)
+        for child_uri in source_child_uris:
+            _rewrite_avro_file(child_uri, table_s3_mapping, s3_client, target_bucket, rewritten)
+
+    except Exception as exc:
+        logger.error("Failed to rewrite Avro file %s: %s", s3_uri, exc)
+
+
+def _collect_avro_uris(obj: Any, table_s3_mapping: dict[str, str], uris: list[str]) -> None:
+    """Walk an Avro record and collect any .avro S3 URIs whose bucket is in the mapping.
+
+    These are the *source* URIs (before rewriting) so we know where to fetch them from.
+    """
+    if isinstance(obj, dict):
+        for v in obj.values():
+            _collect_avro_uris(v, table_s3_mapping, uris)
+    elif isinstance(obj, list):
+        for v in obj:
+            _collect_avro_uris(v, table_s3_mapping, uris)
+    elif isinstance(obj, str) and obj.endswith(".avro"):
+        parsed = urlparse(obj)
+        if parsed.netloc in table_s3_mapping:
+            uris.append(obj)
+
+
+def _rewrite_avro_record(obj: Any, table_s3_mapping: dict[str, str]) -> Any:
+    """Recursively walk an Avro record (dict/list/str) and rewrite S3 paths."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            obj[k] = _rewrite_avro_record(v, table_s3_mapping)
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            obj[i] = _rewrite_avro_record(v, table_s3_mapping)
+    elif isinstance(obj, str):
+        return _remap_s3_string(obj, table_s3_mapping)
+    return obj
+
+
 def rewrite_iceberg_metadata(
     metadata_s3_uri: Optional[str],
     table_s3_mapping: dict[str, str],
@@ -155,6 +265,10 @@ def rewrite_iceberg_metadata(
 ) -> Optional[str]:
     """Download an Iceberg metadata JSON from S3, rewrite embedded bucket
     references, and upload to the target bucket.
+
+    Also rewrites any ``.avro`` manifest-list and manifest files referenced
+    in the metadata so that all S3 paths in the Iceberg metadata tree point
+    to the target bucket.
 
     Returns the new S3 URI (in the target bucket).
     """
@@ -173,17 +287,34 @@ def rewrite_iceberg_metadata(
     try:
         key = parsed.path.lstrip("/")
         resp = s3_client.get_object(Bucket=source_bucket, Key=key)
-        content = resp["Body"].read().decode("utf-8")
+        original_content = resp["Body"].read().decode("utf-8")
 
-        for src_bkt, tgt_bkt in table_s3_mapping.items():
-            content = content.replace(f"s3://{src_bkt}/", f"s3://{tgt_bkt}/")
-            content = content.replace(f"s3a://{src_bkt}/", f"s3a://{tgt_bkt}/")
+        # Collect .avro URIs from the *original* metadata (source bucket paths)
+        # before rewriting, so we know where to fetch them from.
+        avro_source_uris: list[str] = []
+        try:
+            original_metadata = json.loads(original_content)
+            for snapshot in original_metadata.get("snapshots", []):
+                uri = snapshot.get("manifest-list", "")
+                if uri and uri.endswith(".avro"):
+                    avro_source_uris.append(uri)
+        except json.JSONDecodeError:
+            pass
+
+        # Rewrite and upload the JSON metadata file
+        content = _remap_s3_string(original_content, table_s3_mapping)
 
         s3_client.put_object(
             Bucket=target_bucket, Key=key, Body=content.encode("utf-8"), ContentType="application/json"
         )
         new_uri = f"s3://{target_bucket}/{key}"
         logger.info("Rewrote Iceberg metadata: %s -> %s", metadata_s3_uri, new_uri)
+
+        # --- Rewrite .avro manifest-list and manifest files ---
+        rewritten: set[str] = set()
+        for avro_uri in avro_source_uris:
+            _rewrite_avro_file(avro_uri, table_s3_mapping, s3_client, target_bucket, rewritten)
+
         return new_uri
 
     except Exception as exc:
